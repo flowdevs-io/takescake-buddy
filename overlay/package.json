@@ -1,0 +1,47 @@
+{
+  "name": "mtga-overlay",
+  "productName": "MTGA Tracker",
+  "version": "1.0.17",
+  "description": "MTG Arena Draw Odds Overlay",
+  "author": "MTGA Tracker",
+  "main": "index.js",
+  "scripts": {
+    "start": "electron .",
+    "backend:build": "node ./scripts/build-backend.js",
+    "scraper:build": "node ./scripts/build-scraper.js",
+    "package": "npm run backend:build && npm run scraper:build && electron-builder build --dir",
+    "make": "npm run backend:build && npm run scraper:build && electron-builder build --win"
+  },
+  "build": {
+    "appId": "com.mtgatracker.app",
+    "productName": "MTGA Tracker",
+    "icon": "build/icon.png",
+    "directories": {
+      "output": "dist-app"
+    },
+    "extraResources": [
+      {
+        "from": "dist/backend",
+        "to": "backend"
+      }
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "include": "build/installer.nsh"
+    }
+  },
+  "devDependencies": {
+    "electron": "^41.2.0",
+    "electron-builder": "^26.8.1"
+  },
+  "dependencies": {
+    "electron-overlay-window": "^4.0.2"
+  }
+}

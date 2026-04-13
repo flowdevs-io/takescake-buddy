@@ -1,0 +1,30 @@
+.claude/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+
+# Build outputs
+*.bun-build
+.18a583bfa7afff7c-00000000.bun-build
+overlay/dist/
+overlay/dist-app/
+overlay/out/
+
+# Dependencies
+node_modules/
+overlay/node_modules/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Runtime data and temporary files
+scraper/card_images/
+scraper/history.sqlite
+scraper/history.sqlite-shm
+scraper/history.sqlite-wal
+scraper/collection.json
+scraper/.tmp-*.js
+scraper/tracker-ui.out
+scraper/tracker-ui.err
