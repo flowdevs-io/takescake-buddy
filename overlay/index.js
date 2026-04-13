@@ -1,4 +1,4 @@
-const { app, BrowserWindow, globalShortcut, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, globalShortcut, Tray, Menu, nativeImage, ipcMain } = require('electron');
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -129,7 +129,7 @@ async function resolveBackendPort() {
   }
 }
 
-async function waitForBackend(url, timeoutMs = 20000) {
+async function waitForBackend(url, timeoutMs = 60000) {
   const deadline = Date.now() + timeoutMs;
   let lastError = null;
 
@@ -234,14 +234,11 @@ function createWindows() {
     height: 800,
     frame: false,
     titleBarStyle: 'hidden',
-    titleBarOverlay: {
-      color: '#010409',
-      symbolColor: '#8b949e',
-      height: 38
-    },
+    titleBarOverlay: false,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js')
     },
     icon: ICON_PATH
   });
@@ -339,6 +336,30 @@ if (!gotTheLock) {
   });
 
   app.whenReady().then(async () => {
+    ipcMain.on('app-close', (event) => {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (win) {
+        if (win === launcherWin) {
+          win.hide();
+        } else {
+          win.close();
+        }
+      }
+    });
+
+    ipcMain.on('app-minimize', (event) => {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (win) win.minimize();
+    });
+
+    ipcMain.on('app-maximize', (event) => {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (win) {
+        if (win.isMaximized()) win.restore();
+        else win.maximize();
+      }
+    });
+
     createWindows();
     createTray();
 

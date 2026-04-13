@@ -1,7 +1,7 @@
 {
   "name": "mtga-overlay",
   "productName": "MTGA Tracker",
-  "version": "1.0.17",
+  "version": "2.0.7",
   "description": "MTG Arena Draw Odds Overlay",
   "author": "MTGA Tracker",
   "main": "index.js",
@@ -10,12 +10,19 @@
     "backend:build": "node ./scripts/build-backend.js",
     "scraper:build": "node ./scripts/build-scraper.js",
     "package": "npm run backend:build && npm run scraper:build && electron-builder build --dir",
-    "make": "npm run backend:build && npm run scraper:build && electron-builder build --win"
+    "make": "npm run backend:build && npm run scraper:build && electron-builder build --win",
+    "make:x64": "npm run backend:build && npm run scraper:build && electron-builder build --win --x64",
+    "make:arm64": "npm run backend:build && npm run scraper:build && electron-builder build --win --arm64"
   },
   "build": {
     "appId": "com.mtgatracker.app",
     "productName": "MTGA Tracker",
     "icon": "build/icon.png",
+    "files": [
+      "**/*",
+      "!dist-app{,/**/*}",
+      "!dist-release{,/**/*}"
+    ],
     "directories": {
       "output": "dist-app"
     },

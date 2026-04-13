@@ -20,6 +20,8 @@ const LLM_CONTEXT_FILE = path.join(DATA_DIR, "llm-context.txt");
 const LOG_PATH = Bun.env.TRACKER_LOG_PATH || (Bun.env.USERPROFILE + "\\AppData\\LocalLow\\Wizards Of The Coast\\MTGA\\Player.log");
 const LOOKUP_RETRY_AFTER_MS = 30 * 60 * 1000;
 const SERVER_PORT = Number(Bun.env.PORT || 3000);
+const LOG_PROCESS_BATCH_SIZE = 10;
+const STARTUP_SCAN_DELAY_MS = 1500;
 const STARTUP_SCAN_WINDOW_BYTES = 2 * 1024 * 1024;
 const RECOVERY_SCAN_WINDOW_BYTES = 8 * 1024 * 1024;
 const DECK_RECOVERY_SCAN_WINDOW_BYTES = 8 * 1024 * 1024;
@@ -2954,9 +2956,11 @@ function handleLogObject(obj) {
 }
 
 let logBuffer = "";
-function processBuffer() {
+function processBufferBatch(maxObjects = LOG_PROCESS_BATCH_SIZE) {
     let cursor = 0;
-    while (cursor < logBuffer.length) {
+    let processedObjects = 0;
+
+    while (cursor < logBuffer.length && processedObjects < maxObjects) {
         const startIdx = logBuffer.indexOf('{', cursor);
         if (startIdx === -1) { logBuffer = ""; break; }
         let bracketCount = 0, endIdx = -1;
@@ -2969,10 +2973,21 @@ function processBuffer() {
             try { handleLogObject(JSON.parse(logBuffer.slice(startIdx, endIdx + 1))); } catch (e) {}
             logBuffer = logBuffer.slice(endIdx + 1);
             cursor = 0;
+            processedObjects += 1;
         } else {
             logBuffer = logBuffer.slice(startIdx);
             break;
         }
+    }
+
+    return processedObjects >= maxObjects && logBuffer.length > 0;
+}
+
+async function processBuffer() {
+    let hasMoreBufferedObjects = processBufferBatch();
+    while (hasMoreBufferedObjects) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        hasMoreBufferedObjects = processBufferBatch();
     }
 }
 
@@ -3063,39 +3078,49 @@ function closeTrackerRun() {
 }
 
 async function runScan() {
-    if (!fs.existsSync(LOG_PATH)) { isScanning = false; return; }
-    const stats = fs.statSync(LOG_PATH);
-    const checkpoint = historyStore.getCheckpoint(LOG_PATH);
-    const restoredRuntimeState = restoreRuntimeStateFromDisk(checkpoint, stats.size);
-    const plan = resolveStartupScanPlan(checkpoint, stats.size, restoredRuntimeState);
-    trackerRunId = historyStore.startRun({
-        logPath: LOG_PATH,
-        bootSource: plan.bootSource,
-        initialLogOffset: plan.startOffset
-    });
-
-    if (plan.startOffset < stats.size) {
-        const stream = fs.createReadStream(LOG_PATH, { start: plan.startOffset });
-        for await (const chunk of stream) {
-            trackerRunProcessedBytes += chunk.length;
-            logBuffer += chunk.toString();
-            processBuffer();
+    try {
+        if (!fs.existsSync(LOG_PATH)) {
+            return;
         }
+
+        const stats = fs.statSync(LOG_PATH);
+        const checkpoint = historyStore.getCheckpoint(LOG_PATH);
+        const restoredRuntimeState = restoreRuntimeStateFromDisk(checkpoint, stats.size);
+        const plan = resolveStartupScanPlan(checkpoint, stats.size, restoredRuntimeState);
+        trackerRunId = historyStore.startRun({
+            logPath: LOG_PATH,
+            bootSource: plan.bootSource,
+            initialLogOffset: plan.startOffset
+        });
+
+        if (plan.startOffset < stats.size) {
+            const stream = fs.createReadStream(LOG_PATH, { start: plan.startOffset });
+            for await (const chunk of stream) {
+                trackerRunProcessedBytes += chunk.length;
+                logBuffer += chunk.toString();
+                await processBuffer();
+            }
+        }
+
+        const recovered = recoverCompletedMatchesFromRecentLog();
+        if (recovered.inserted || recovered.updated) {
+            console.log(`[history] Recovered ${recovered.inserted} missing games and refreshed ${recovered.updated} existing results`);
+        }
+
+        const recoveredDeck = recoverDeckStateFromRecentLog(true);
+        if (recoveredDeck) {
+            gameState.lastUpdate = Date.now();
+        }
+
+        lastSize = stats.size;
+        persistRuntimeState();
+    } catch (error) {
+        console.error("[tracker] Startup scan failed:", error);
+    } finally {
+        isScanning = false;
+        broadcast("state-update", getEnhancedState());
     }
-    const recovered = recoverCompletedMatchesFromRecentLog();
-    if (recovered.inserted || recovered.updated) {
-        console.log(`[history] Recovered ${recovered.inserted} missing games and refreshed ${recovered.updated} existing results`);
-    }
-    const recoveredDeck = recoverDeckStateFromRecentLog(true);
-    if (recoveredDeck) {
-        gameState.lastUpdate = Date.now();
-    }
-    lastSize = stats.size;
-    persistRuntimeState();
-    isScanning = false;
-    broadcast("state-update", getEnhancedState());
 }
-runScan();
 
 setInterval(async () => {
     if (isScanning || !fs.existsSync(LOG_PATH)) return;
@@ -3113,7 +3138,7 @@ setInterval(async () => {
         for await (const chunk of stream) {
             trackerRunProcessedBytes += chunk.length;
             logBuffer += chunk.toString();
-            processBuffer();
+            await processBuffer();
         }
         lastSize = stats.size;
         reconcileCurrentCompletedMatch(true);
@@ -4106,6 +4131,19 @@ ev.addEventListener('state-update', e => render(JSON.parse(e.data)));
         }
         .display-face { font-family: 'Bricolage Grotesque', sans-serif; }
         
+        /* Battle.net Style Form Elements */
+        input[type="search"], input[type="text"], select, button {
+            transition: all 0.2s ease;
+        }
+        input[type="search"]:focus, input[type="text"]:focus, select:focus {
+            border-color: #00a2e8 !important;
+            box-shadow: 0 0 0 1px rgba(0, 162, 232, 0.4) !important;
+            background: rgba(21, 23, 30, 0.95) !important;
+        }
+        button:active {
+            transform: translateY(1px);
+        }
+        
         /* Auto-Glassmorphism for all slate cards we can target by their tailwind border / bg classes */
         div[class*="bg-slate-950/70"], 
         div[class*="bg-slate-950/65"], 
@@ -4234,9 +4272,61 @@ ev.addEventListener('state-update', e => render(JSON.parse(e.data)));
         .nav-icon { opacity: 0.45; transition: opacity 0.15s; }
         .sidebar-nav-item:hover .nav-icon { opacity: 0.8; }
         html.launcher .top-nav-links { display: none !important; }
+
+        /* Window Controls (Battle.net Style) */
+        .window-controls {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 38px;
+            display: flex;
+            justify-content: flex-end;
+            z-index: 10000;
+            pointer-events: none;
+        }
+        .drag-region {
+            flex: 1;
+            height: 100%;
+            -webkit-app-region: drag;
+            pointer-events: auto;
+        }
+        .win-btn {
+            width: 46px;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: transparent;
+            border: none;
+            color: #bdc4ca;
+            -webkit-app-region: no-drag;
+            pointer-events: auto;
+            cursor: pointer;
+            transition: background 0.1s, color 0.1s;
+        }
+        .win-btn:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
+        .win-close:hover { background: #e81123; color: white; }
+        .win-btn svg { pointer-events: none; }
     </style>
 </head>
 <body class="${isOverlay ? 'p-0' : ''}">
+
+    <!-- Window Controls that mimic Battle.net style -->
+    ${isOverlay ? '' : `
+    <div class="window-controls">
+        <div class="drag-region"></div>
+        <button class="win-btn win-min" onclick="window.electronAPI && window.electronAPI.appMinimize()">
+            <svg viewBox="0 0 10 1" width="10" height="1"><rect width="10" height="1" fill="currentColor"/></svg>
+        </button>
+        <button class="win-btn win-max" onclick="window.electronAPI && window.electronAPI.appMaximize()">
+            <svg viewBox="0 0 10 10" width="10" height="10"><rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1"/></svg>
+        </button>
+        <button class="win-btn win-close" onclick="window.electronAPI && window.electronAPI.appClose()">
+            <svg viewBox="0 0 10 10" width="10" height="10"><path d="M1 1 l 8 8 m 0 -8 l -8 8" stroke="currentColor" stroke-width="1"/></svg>
+        </button>
+    </div>
+    `}
 
     <!-- Sidebar -->
     <aside class="sidebar ${isOverlay || isLauncher ? 'hidden' : ''}">
@@ -5235,5 +5325,9 @@ ev.addEventListener('state-update', e => render(JSON.parse(e.data)));
     `, { headers: { "Content-Type": "text/html" } });
     }
 });
+
+setTimeout(() => {
+    void runScan();
+}, STARTUP_SCAN_DELAY_MS);
 
 console.log(`Tracker Pro Active: http://localhost:${SERVER_PORT}`);

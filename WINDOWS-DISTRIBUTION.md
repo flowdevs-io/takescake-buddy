@@ -21,11 +21,36 @@ npm run backend:build
 npm run make
 ```
 
-Artifacts are written to:
+Direct `electron-builder` artifacts are written to:
 
 ```text
 overlay\dist-app
 ```
+
+To build a native Windows ARM64 installer directly from `overlay/`:
+
+```powershell
+$env:BUN_BACKEND_TARGET = "bun-windows-arm64"
+npm run make -- --arm64
+```
+
+Windows ARM64 packaging requires Bun 1.3.12 or newer.
+Local ARM64 packaging also requires the Visual Studio Desktop development with C++ workload and the ARM64 MSVC tools because `electron-overlay-window` is rebuilt natively.
+
+Release helper assets are written to:
+
+```text
+dist-release
+```
+
+Silent install or update from PowerShell:
+
+```powershell
+Start-Process -FilePath '.\MTGA Tracker Setup X.Y.Z-arm64.exe' -ArgumentList '/S' -Wait
+```
+
+- `/S` runs the NSIS installer silently.
+- Silent upgrades reuse the existing install location and update it in place.
 
 Release publishing:
 
@@ -33,6 +58,20 @@ Release publishing:
 
 ```powershell
 .\Build-Release.ps1 -Version patch
+```
+
+This builds the x64 installer locally.
+
+To build only the arm64 installer locally:
+
+```powershell
+.\Build-Release.ps1 -Version patch -Architectures arm64
+```
+
+To build both local installers:
+
+```powershell
+.\Build-Release.ps1 -Version patch -Architectures x64,arm64
 ```
 
 - Build, commit, tag, push, and publish through GitHub Actions:
@@ -45,10 +84,10 @@ What `-Publish` does:
 
 - requires a clean git working tree
 - bumps the app version in `overlay\package.json`
-- builds the installer locally first
+- builds the x64 installer locally first by default
 - creates a `Release vX.Y.Z` commit
 - creates and pushes a matching `vX.Y.Z` tag
-- triggers `.github/workflows/release.yml`, which rebuilds on `windows-latest` and attaches the installer, blockmap, and checksum to the GitHub Release
+- triggers `.github/workflows/release.yml`, which rebuilds on `windows-latest` and attaches x64 and arm64 installers, blockmaps, and checksums to the GitHub Release
 
 Why use Actions for the actual release assets:
 
@@ -59,13 +98,20 @@ Why use Actions for the actual release assets:
 Backend build target:
 
 - Default: `bun-windows-x64`
-- Override: set `BUN_BACKEND_TARGET`
+- Override: set `BUN_BACKEND_TARGET` to match the installer architecture you are building
 
 Example:
 
 ```powershell
 $env:BUN_BACKEND_TARGET = "bun-windows-x64-baseline"
 npm run backend:build
+```
+
+For native ARM64 packaging, use:
+
+```powershell
+$env:BUN_BACKEND_TARGET = "bun-windows-arm64"
+npm run make -- --arm64
 ```
 
 Note:
