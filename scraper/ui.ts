@@ -3136,25 +3136,32 @@ process.on("SIGTERM", () => {
 });
 
 function buildHistoryPageBody() {
-    return `
-    <div class="space-y-6">
-        <section class="glass arena-panel relative overflow-hidden rounded-[3rem] border border-white/5 p-8 shadow-[0_40px_120px_rgba(2,6,23,0.68)]">
-            <div class="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(249,115,22,0.18),transparent_24%),radial-gradient(circle_at_bottom_left,rgba(56,189,248,0.12),transparent_28%),linear-gradient(160deg,rgba(15,23,42,0.1),rgba(2,6,23,0.84))]"></div>
-            <div class="relative">
-                <div class="mb-4 flex flex-wrap items-center gap-3">
-                    <span class="rounded-full border border-orange-400/25 bg-orange-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-[0.42em] text-orange-100">Match History</span>
+    let historyBody = `
+    <div class="relative space-y-6">
+        <!-- Hero Banner -->
+        <section class="relative overflow-hidden rounded-[3rem] border border-white/10 shadow-[0_64px_160px_-40px_rgba(0,0,0,0.9)]" style="background: linear-gradient(135deg, #05080f 0%, #0c1424 40%, #1a0f2e 100%);">
+            <div class="pointer-events-none absolute inset-0" style="background: radial-gradient(ellipse 70% 80% at 85% 50%, rgba(249,115,22,0.1) 0%, transparent 60%), radial-gradient(ellipse 50% 70% at 15% 20%, rgba(139, 92, 246, 0.08) 0%, transparent 60%);"></div>
+            <div class="pointer-events-none absolute inset-0 opacity-[0.03]" style="background-image: repeating-linear-gradient(90deg, rgba(255,255,255,1) 0px, rgba(255,255,255,1) 1px, transparent 1px, transparent 128px), repeating-linear-gradient(0deg, rgba(255,255,255,1) 0px, rgba(255,255,255,1) 1px, transparent 1px, transparent 128px);"></div>
+            
+            <div class="relative px-12 py-12 xl:px-16 xl:py-14">
+                <div class="mb-5 flex items-center gap-4">
+                    <div class="h-[2px] w-12 bg-gradient-to-r from-transparent to-orange-500"></div>
+                    <span class="text-[10px] font-black uppercase tracking-[0.6em] text-orange-500/80">Battle Archives</span>
                 </div>
-                <h1 class="display-face text-4xl font-black uppercase tracking-[0.02em] text-white md:text-6xl">Game Analytics</h1>
-                <p class="mt-4 max-w-2xl text-sm leading-6 text-slate-300">Post-game statistics, win rates, play/draw splits, mulligan data, and card performance across your tracked matches.</p>
+                <h1 class="display-face font-black uppercase leading-[0.9] tracking-tight text-white mb-2" style="font-size: clamp(3rem, 7vw, 5rem);">Combat <span style="background: linear-gradient(90deg, #f97316 20%, #fb923c 80%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0 0 30px rgba(249,115,22,0.4));">Ledger</span></h1>
+                <p class="mt-6 text-base text-slate-400 max-w-xl leading-relaxed font-medium">Retrospective combat analysis. Every mulligan, every top-deck, and every victory decrypted for your review.</p>
 
-                <div class="mt-6 flex flex-wrap gap-3">
-                    <select id="histDeckFilter" class="rounded-2xl border border-white/10 bg-slate-900/70 px-5 py-3 text-[10px] font-black uppercase tracking-[0.3em] text-white outline-none">
-                        <option value="">All Decks</option>
-                    </select>
-                    <button id="histRefresh" class="rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-[10px] font-black uppercase tracking-[0.3em] text-slate-300 transition hover:bg-white/10">Refresh</button>
+                <div class="mt-10 flex flex-wrap gap-4">
+                    <div class="min-w-[200px] rounded-[1.4rem] border border-white/10 bg-black/40 px-5 py-3 transition-all focus-within:border-orange-500/50">
+                        <div class="text-[8px] font-black uppercase tracking-[0.5em] text-slate-600 mb-1.5">Archetype context</div>
+                        <select id="histDeckFilter" class="w-full bg-transparent text-xs font-black text-slate-200 outline-none appearance-none cursor-pointer">
+                            <option value="">ALL SIGNAL SOURCES</option>
+                        </select>
+                    </div>
+                    <button id="histRefresh" class="rounded-[1.4rem] border border-white/10 bg-white/5 px-8 py-3 text-[10px] font-black uppercase tracking-[0.4em] text-slate-300 transition-all hover:bg-white/10 hover:border-white/20 active:scale-95">SYNC ARCHIVE</button>
                 </div>
 
-                <div id="histTotals" class="mt-8 grid gap-3 md:grid-cols-3 xl:grid-cols-6"></div>
+                <div id="histTotals" class="mt-12 grid gap-4 sm:grid-cols-3 xl:grid-cols-6"></div>
             </div>
         </section>
 
@@ -3351,11 +3358,11 @@ html, body {
     width: 260px;
     opacity: 0;
     transform: translateY(-12px);
-    transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1), transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
     pointer-events: none;
     display: flex;
     flex-direction: column;
-    filter: drop-shadow(0 20px 40px rgba(0,0,0,0.5));
+    filter: drop-shadow(0 32px 64px rgba(0,0,0,0.85));
 }
 #widget.visible {
     opacity: 1;
@@ -3374,80 +3381,81 @@ html, body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    background: rgba(15, 23, 42, 0.85);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-bottom: 1px solid rgba(0, 0, 0, 0.5);
-    border-radius: 12px 12px 0 0;
-    padding: 10px 14px;
+    background: linear-gradient(180deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.98) 100%);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.6);
+    border-radius: 16px 16px 0 0;
+    padding: 12px 16px;
     cursor: grab;
     user-select: none;
     position: relative;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.1);
+    box-shadow: inset 0 1px 1px rgba(255,255,255,0.08);
 }
 #header:active {
     cursor: grabbing;
 }
 #widget.minimized #header {
-    border-radius: 12px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .header-left {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
 }
 
 .drag-indicator {
     display: flex;
     flex-direction: column;
     gap: 3px;
-    opacity: 0.5;
+    opacity: 0.4;
 }
 .drag-indicator div {
-    width: 14px;
-    height: 2px;
+    width: 12px;
+    height: 1.5px;
     background: #fff;
-    border-radius: 2px;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.5);
+    border-radius: 1px;
 }
 
 #header-label {
-    font-size: 11px;
-    font-weight: 800;
-    letter-spacing: 0.2em;
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 0.3em;
     text-transform: uppercase;
-    background: linear-gradient(to right, #f97316, #fcd34d);
+    background: linear-gradient(90deg, #f97316, #fb923c);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    filter: drop-shadow(0 0 10px rgba(249,115,22,0.35));
 }
 #header-info {
-    font-size: 10px;
-    font-weight: 600;
-    color: #94a3b8;
-    letter-spacing: 0.05em;
+    font-size: 9px;
+    font-weight: 700;
+    color: #64748b;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
 }
 
 /* Card list */
 #list {
-    background: rgba(15, 23, 42, 0.75);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(8, 12, 21, 0.88);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-top: none;
-    border-radius: 0 0 12px 12px;
+    border-radius: 0 0 16px 16px;
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    box-shadow: inset 0 0 40px rgba(0,0,0,0.4);
 }
 
 .row {
     display: flex;
     align-items: center;
-    padding: 8px 12px 8px 0;
+    padding: 10px 14px 10px 0;
     border-bottom: 1px solid rgba(255,255,255,0.05);
     gap: 10px;
     position: relative;
@@ -3455,98 +3463,104 @@ html, body {
     transition: background 0.2s;
 }
 .row:hover {
-    background: rgba(255,255,255,0.03);
+    background: rgba(255,255,255,0.06);
 }
 .row:last-child { border-bottom: none; }
 
 .row-fill {
     position: absolute;
     left: 0; top: 0; bottom: 0;
-    background: linear-gradient(90deg, rgba(249, 115, 22, 0.15) 0%, rgba(249, 115, 22, 0) 100%);
+    background: linear-gradient(90deg, rgba(249, 115, 22, 0.18) 0%, rgba(249, 115, 22, 0.05) 60%, rgba(249, 115, 22, 0) 100%);
     pointer-events: none;
-    transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+    transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .row-stripe {
-    width: 4px;
+    width: 3px;
     align-self: stretch;
     flex-shrink: 0;
-    border-radius: 0 2px 2px 0;
-    box-shadow: 1px 0 4px rgba(0,0,0,0.3);
+    border-radius: 0 4px 4px 0;
+    box-shadow: 2px 0 8px rgba(0,0,0,0.4);
 }
 
-.row-left { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.row-left { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; padding-left: 12px; }
 .row-name {
-    font-size: 12px;
-    font-weight: 700;
-    color: #f8fafc;
+    font-size: 11px;
+    font-weight: 800;
+    color: #ffffff;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+    letter-spacing: 0.02em;
 }
 .row-sub {
     display: flex;
     align-items: center;
-    gap: 6px;
-    font-size: 9px;
-    font-weight: 600;
-    color: #94a3b8;
+    gap: 8px;
+    font-size: 8px;
+    font-weight: 700;
+    color: #475569;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.15em;
 }
 .row-colors { display: inline-flex; gap: 3px; }
 .row-color {
-    width: 14px; height: 14px;
+    width: 13px; height: 13px;
     border-radius: 50%;
     display: inline-flex; align-items: center; justify-content: center;
-    font-size: 8px; font-weight: 800;
-    border: 1px solid rgba(255,255,255,0.2);
-    box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+    font-size: 7px; font-weight: 900;
+    border: 1px solid rgba(255,255,255,0.25);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.6);
 }
-.row-color.w { background: linear-gradient(180deg, #f8fafc, #cbd5e1); color: #0f172a; }
-.row-color.u { background: linear-gradient(180deg, #60a5fa, #2563eb); color: #fff; }
-.row-color.b { background: linear-gradient(180deg, #334155, #0f172a); color: #fff; }
-.row-color.r { background: linear-gradient(180deg, #f87171, #dc2626); color: #fff; }
-.row-color.g { background: linear-gradient(180deg, #4ade80, #16a34a); color: #fff; }
-.row-color.c { background: linear-gradient(180deg, #94a3b8, #475569); color: #fff; }
+.row-color.w { background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 100%); color: #0f172a; }
+.row-color.u { background: linear-gradient(135deg, #38bdf8 0%, #1d4ed8 100%); color: #fff; }
+.row-color.b { background: linear-gradient(135deg, #475569 0%, #020617 100%); color: #fff; }
+.row-color.r { background: linear-gradient(135deg, #f87171 0%, #b91c1c 100%); color: #fff; }
+.row-color.g { background: linear-gradient(135deg, #4ade80 0%, #15803d 100%); color: #fff; }
+.row-color.c { background: linear-gradient(135deg, #94a3b8 0%, #334155 100%); color: #fff; }
 
 .row-right { text-align: right; flex-shrink: 0; display: flex; flex-direction: column; gap: 2px; }
 .row-pct {
-    font-size: 15px;
-    font-weight: 800;
-    color: #fdba74;
-    text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+    font-size: 14px;
+    font-weight: 900;
+    color: #f97316;
+    filter: drop-shadow(0 0 8px rgba(249,115,22,0.25));
 }
 .row-in2 {
-    font-size: 9px;
-    font-weight: 600;
-    color: #64748b;
+    font-size: 8px;
+    font-weight: 700;
+    color: #475569;
+    letter-spacing: 0.05em;
 }
-.row-in2 span { color: #cbd5e1; }
+.row-in2 span { color: #94a3b8; }
 
 .hotkeys-help {
     position: absolute;
-    bottom: -24px;
+    bottom: -28px;
     right: 0;
-    font-size: 10px;
-    color: rgba(255,255,255,0.4);
+    font-size: 9px;
+    font-weight: 800;
+    color: rgba(255,255,255,0.3);
     pointer-events: none;
-    transition: opacity 0.3s;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+    transition: all 0.3s;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
     background: rgba(15, 23, 42, 0.4);
-    padding: 2px 8px;
-    border-radius: 4px;
+    padding: 4px 12px;
+    border-radius: 99px;
+    border: 1px solid rgba(255,255,255,0.05);
 }
 #widget:hover .hotkeys-help {
     opacity: 1;
-    color: #fff;
+    color: rgba(255,255,255,0.8);
+    background: rgba(15, 23, 42, 0.8);
+    border-color: rgba(255,255,255,0.15);
 }
 
 body.interactive #widget {
-    outline: 2px solid #f97316;
-    outline-offset: 2px;
-    box-shadow: 0 0 20px rgba(249, 115, 22, 0.4);
+    outline: 1.5px solid #f97316;
+    outline-offset: 4px;
+    box-shadow: 0 0 32px rgba(249, 115, 22, 0.5);
 }
 body.interactive #widget::after {
     content: 'INTERACTIVE MODE (ALT+SHIFT+F to exit)';
@@ -3978,40 +3992,40 @@ ev.addEventListener('state-update', e => render(JSON.parse(e.data)));
             </div>
 
             <!-- Sticky Filter Bar -->
-            <div class="sticky top-4 z-30 rounded-[2rem] border border-white/10 px-6 py-4 shadow-[0_8px_40px_rgba(2,6,23,0.9)]" style="background: rgba(6,9,18,0.96); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);">
-                <div class="flex flex-wrap gap-3 items-center">
-                    <label class="flex-1 min-w-[180px] flex items-center gap-3 rounded-[1.5rem] border border-white/10 bg-slate-950/60 px-4 py-3 transition-colors hover:border-white/20 cursor-text">
-                        <svg class="w-3 h-3 text-slate-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-                        <input id="collectionSearch" type="search" placeholder="Search by name, set, or type…" class="w-full bg-transparent text-sm text-white outline-none placeholder:text-slate-600">
+            <div class="sticky top-4 z-30 rounded-[1.8rem] border border-white/12 px-8 py-5 shadow-[0_32px_80px_-20px_rgba(0,0,0,0.95)]" style="background: rgba(3,6,12,0.92); backdrop-filter: blur(32px) saturate(160%);">
+                <div class="flex flex-wrap gap-4 items-center">
+                    <label class="flex-1 min-w-[220px] flex items-center gap-4 rounded-[1.4rem] border border-white/10 bg-black/50 px-5 py-3.5 transition-all hover:border-white/20 focus-within:border-orange-500/50 focus-within:ring-1 focus-within:ring-orange-500/20 cursor-text">
+                        <svg class="w-3.5 h-3.5 text-slate-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                        <input id="collectionSearch" type="search" placeholder="Query registry by name, set, or type…" class="w-full bg-transparent text-sm font-medium text-white outline-none placeholder:text-slate-600">
                     </label>
-                    <label class="rounded-[1.5rem] border border-white/10 bg-slate-950/60 px-4 py-3 min-w-[148px] transition-colors hover:border-white/20 cursor-pointer">
-                        <div class="text-[8px] font-black uppercase tracking-[0.5em] text-slate-600 mb-1">Sort By</div>
-                        <select id="collectionSort" class="w-full bg-transparent text-xs font-bold text-white outline-none cursor-pointer">
-                            <option value="quantity">Most Owned</option>
-                            <option value="name">Name A–Z</option>
-                            <option value="set">Set Code</option>
-                            <option value="rarity">Rarity</option>
-                            <option value="llm">AI Deck Sort</option>
+                    <label class="rounded-[1.4rem] border border-white/10 bg-black/50 px-5 py-3 min-w-[160px] transition-all hover:border-white/20 cursor-pointer">
+                        <div class="text-[8px] font-black uppercase tracking-[0.5em] text-slate-600 mb-1.5">Sort logic</div>
+                        <select id="collectionSort" class="w-full bg-transparent text-xs font-black text-slate-200 outline-none cursor-pointer appearance-none">
+                            <option value="quantity">QUANTITY OWNED</option>
+                            <option value="name">ALPHABETICAL</option>
+                            <option value="set">RELEASE SEQUENCE</option>
+                            <option value="rarity">SCARCITY VALUE</option>
+                            <option value="llm">AI DECK SYNERGY</option>
                         </select>
                     </label>
-                    <label class="rounded-[1.5rem] border border-white/10 bg-slate-950/60 px-4 py-3 min-w-[148px] transition-colors hover:border-white/20 cursor-pointer">
-                        <div class="text-[8px] font-black uppercase tracking-[0.5em] text-slate-600 mb-1">Format</div>
-                        <select id="collectionFormat" class="w-full bg-transparent text-xs font-bold text-white outline-none cursor-pointer">
-                            <option value="all">All Formats</option>
-                            <option value="standard">Standard</option>
-                            <option value="alchemy">Alchemy</option>
-                            <option value="historic">Historic</option>
-                            <option value="timeless">Timeless</option>
-                            <option value="brawl">Brawl</option>
-                            <option value="commander">Commander</option>
+                    <label class="rounded-[1.4rem] border border-white/10 bg-black/50 px-5 py-3 min-w-[160px] transition-all hover:border-white/20 cursor-pointer">
+                        <div class="text-[8px] font-black uppercase tracking-[0.5em] text-slate-600 mb-1.5">Format protocol</div>
+                        <select id="collectionFormat" class="w-full bg-transparent text-xs font-black text-slate-200 outline-none cursor-pointer appearance-none">
+                            <option value="all">ALL PROTOCOLS</option>
+                            <option value="standard">STANDARD</option>
+                            <option value="alchemy">ALCHEMY</option>
+                            <option value="historic">HISTORIC</option>
+                            <option value="timeless">TIMELESS</option>
+                            <option value="brawl">BRAWL</option>
+                            <option value="commander">COMMANDER</option>
                         </select>
                     </label>
-                    <div class="flex flex-wrap gap-2 ml-auto">
-                        <button id="exportCsv" class="rounded-[1.2rem] border border-sky-500/25 bg-sky-500/10 px-4 py-3 text-[9px] font-black uppercase tracking-[0.3em] text-sky-200 transition hover:border-sky-400/50 hover:bg-sky-500/20">CSV</button>
-                        <button id="exportJson" class="rounded-[1.2rem] border border-orange-500/25 bg-orange-500/10 px-4 py-3 text-[9px] font-black uppercase tracking-[0.3em] text-orange-200 transition hover:border-orange-400/50 hover:bg-orange-500/20">JSON</button>
-                        <button id="exportLlm" class="rounded-[1.2rem] border border-purple-500/25 bg-purple-500/10 px-4 py-3 text-[9px] font-black uppercase tracking-[0.3em] text-purple-200 transition hover:border-purple-400/50 hover:bg-purple-500/20">AI Export</button>
-                        <label class="cursor-pointer rounded-[1.2rem] border border-emerald-500/25 bg-emerald-500/10 px-4 py-3 text-[9px] font-black uppercase tracking-[0.3em] text-emerald-200 transition hover:border-emerald-400/50 hover:bg-emerald-500/20">
-                            Import CSV<input type="file" id="importCsv" accept=".csv" class="hidden" />
+                    <div class="flex flex-wrap gap-2.5 ml-auto">
+                        <button id="exportCsv" class="rounded-[1.1rem] border border-sky-500/30 bg-sky-500/10 px-5 py-3 text-[9px] font-black uppercase tracking-[0.35em] text-sky-300 transition-all hover:bg-sky-500/20 active:scale-95">CSV</button>
+                        <button id="exportJson" class="rounded-[1.1rem] border border-orange-500/30 bg-orange-500/10 px-5 py-3 text-[9px] font-black uppercase tracking-[0.35em] text-orange-300 transition-all hover:bg-orange-500/20 active:scale-95">JSON</button>
+                        <button id="exportLlm" class="rounded-[1.1rem] border border-purple-500/30 bg-purple-500/10 px-5 py-3 text-[9px] font-black uppercase tracking-[0.35em] text-purple-300 transition-all hover:bg-purple-500/20 active:scale-95">LLM</button>
+                        <label class="cursor-pointer rounded-[1.1rem] border border-emerald-500/30 bg-emerald-500/10 px-5 py-3 text-[9px] font-black uppercase tracking-[0.35em] text-emerald-300 transition-all hover:bg-emerald-500/20 active:scale-95">
+                            IMPORT<input type="file" id="importCsv" accept=".csv" class="hidden" />
                         </label>
                     </div>
                 </div>
@@ -4247,8 +4261,10 @@ ev.addEventListener('state-update', e => render(JSON.parse(e.data)));
                     <svg class="nav-icon w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
                     Card Collection
                 </a>
-                <a href="/live" class="sidebar-nav-item ${activeNav === 'live' ? 'active' : ''}">
-                    <span id="liveDot" class="nav-icon w-2 h-2 rounded-full bg-slate-600 shrink-0"></span>
+                    <a href="/live" class="sidebar-nav-item ${activeNav === 'live' ? 'active' : ''}">
+                    <span id="liveDot" class="nav-icon w-2 h-2 rounded-full bg-slate-600 shrink-0 relative">
+                        <span class="absolute inset-0 rounded-full bg-orange-500 animate-ping opacity-0" style="${activeNav === 'live' ? 'opacity: 0.6' : ''}"></span>
+                    </span>
                     Live Match
                 </a>
                 <a href="/history" class="sidebar-nav-item ${activeNav === 'history' ? 'active' : ''}">
@@ -4270,22 +4286,22 @@ ev.addEventListener('state-update', e => render(JSON.parse(e.data)));
 
         <!-- Life totals (live page only) -->
         <div id="life" class="${lifeClass} border-t border-white/5 px-5 py-4 grid grid-cols-2 gap-3">
-            <div class="text-center rounded-2xl border border-white/8 py-3" style="background:rgba(10,15,32,0.6)">
+            <div class="text-center rounded-2xl border border-white/8 py-3 bg-slate-950/40">
                 <div class="text-[8px] font-black uppercase tracking-[0.4em] text-slate-600 mb-1">Opponent</div>
-                <div id="oppLife" class="text-3xl font-black text-red-400 tabular-nums italic">20</div>
+                <div id="oppLife" class="text-3xl font-black text-rose-500/90 tabular-nums italic filter drop-shadow-[0_0_10px_rgba(244,63,94,0.3)]">20</div>
             </div>
-            <div class="text-center rounded-2xl border border-white/8 py-3" style="background:rgba(10,15,32,0.6)">
+            <div class="text-center rounded-2xl border border-white/8 py-3 bg-slate-950/40">
                 <div class="text-[8px] font-black uppercase tracking-[0.4em] text-slate-600 mb-1">You</div>
-                <div id="myLife" class="text-3xl font-black text-green-400 tabular-nums italic">20</div>
+                <div id="myLife" class="text-3xl font-black text-emerald-400 tabular-nums italic filter drop-shadow-[0_0_10px_rgba(52,211,153,0.3)]">20</div>
             </div>
         </div>
 
         <!-- Service Status -->
         <div class="px-5 py-4 border-t border-white/5">
             <div class="text-[8px] font-black uppercase tracking-[0.5em] text-slate-700 mb-2">Service Status</div>
-            <div id="serviceStatus" class="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/8 px-3 py-2">
-                <span class="w-2 h-2 rounded-full bg-emerald-400 shrink-0" style="box-shadow: 0 0 6px rgba(52,211,153,0.6);"></span>
-                <span class="text-[9px] font-black uppercase tracking-[0.3em] text-emerald-300">Backend Online</span>
+            <div id="serviceStatus" class="flex items-center gap-2 rounded-xl border border-emerald-500/15 bg-emerald-500/5 px-3 py-2">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 shrink-0" style="box-shadow: 0 0 10px rgba(52,211,153,0.75);"></span>
+                <span class="text-[9px] font-black uppercase tracking-[0.35em] text-emerald-400">Backend Online</span>
             </div>
         </div>
     </aside>
@@ -4320,7 +4336,7 @@ ev.addEventListener('state-update', e => render(JSON.parse(e.data)));
             const deckColorTone = {
                 W: 'border-slate-200/15 bg-slate-100/10 text-slate-100',
                 U: 'border-sky-300/20 bg-sky-500/10 text-sky-100',
-                B: 'border-violet-300/20 bg-violet-500/10 text-violet-100',
+                B: 'border-slate-400/20 bg-slate-800/15 text-slate-100',
                 R: 'border-rose-300/20 bg-rose-500/10 text-rose-100',
                 G: 'border-emerald-300/20 bg-emerald-500/10 text-emerald-100',
                 C: 'border-slate-400/20 bg-slate-500/10 text-slate-200'
@@ -4346,19 +4362,19 @@ ev.addEventListener('state-update', e => render(JSON.parse(e.data)));
             function renderCard(card, tone) {
                 const subtitle = [card.typeLine, card.statLine].filter(Boolean).join(' · ');
                 const artwork = card.imagePath
-                    ? \`<img src="\${card.imagePath}" alt="\${escapeHtml(card.name || 'Card')}" class="h-20 w-14 rounded-[1rem] border border-white/10 object-cover shadow-[0_8px_30px_rgba(15,23,42,0.45)]" loading="lazy">\`
-                    : '<div class="flex h-20 w-14 items-center justify-center rounded-[1rem] border border-dashed border-slate-700 bg-slate-950/80 text-[8px] font-black uppercase tracking-[0.25em] text-slate-500">Syncing</div>';
+                    ? \`<img src="\${card.imagePath}" alt="\${escapeHtml(card.name || 'Card')}" class="h-20 w-14 rounded-[0.8rem] border border-white/12 object-cover shadow-[0_12px_32px_rgba(0,0,0,0.6)]" loading="lazy">\`
+                    : '<div class="flex h-20 w-14 items-center justify-center rounded-[0.8rem] border border-dashed border-white/5 bg-black/40 text-[8px] font-black uppercase tracking-[0.25em] text-slate-700">Decrypted</div>';
                 return \`
-                    <div class="rounded-[1.6rem] border border-white/8 \${tone} px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+                    <div class="rounded-[2.4rem] border border-white/5 \${tone} px-5 py-5 shadow-[inset_0_1px_1px_rgba(255,255,255,0.03)] transition-all hover:border-white/15">
                         <div class="flex items-start gap-4">
                             \${artwork}
                             <div class="min-w-0 flex-1">
                                 <div class="flex items-start justify-between gap-3">
-                                    <div class="text-[9px] font-black uppercase tracking-[0.28em] text-slate-500">\${escapeHtml(card.objectType.replace('GameObjectType_', '') || 'Card')}</div>
-                                    <span class="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[8px] font-black uppercase tracking-[0.28em] text-slate-300">\${card.tapped ? 'Tapped' : 'Ready'}</span>
+                                    <div class="text-[9px] font-black uppercase tracking-[0.4em] text-slate-500">\${escapeHtml(card.objectType.replace('GameObjectType_', '') || 'Object')}</div>
+                                    <span class="rounded-full border border-orange-500/20 bg-orange-500/5 px-3 py-1 text-[8px] font-black uppercase tracking-[0.25em] text-orange-400/80">\${card.tapped ? 'Locked' : 'Active'}</span>
                                 </div>
-                                <div class="mt-2 text-sm font-black leading-tight text-white">\${escapeHtml(card.name || 'Unknown')}</div>
-                                <div class="mt-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">\${escapeHtml(subtitle || 'Public object')}</div>
+                                <div class="mt-2 text-base font-black leading-[1.1] text-white tracking-tight">\${escapeHtml(card.name || 'Unknown Entity')}</div>
+                                <div class="mt-2 text-[9px] font-bold uppercase tracking-[0.25em] text-slate-500">\${escapeHtml(subtitle || 'Signature encrypted')}</div>
                             </div>
                         </div>
                     </div>
