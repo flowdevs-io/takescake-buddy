@@ -27,6 +27,35 @@ Artifacts are written to:
 overlay\dist-app
 ```
 
+Release publishing:
+
+- Local build only:
+
+```powershell
+.\Build-Release.ps1 -Version patch
+```
+
+- Build, commit, tag, push, and publish through GitHub Actions:
+
+```powershell
+.\Build-Release.ps1 -Version patch -Publish
+```
+
+What `-Publish` does:
+
+- requires a clean git working tree
+- bumps the app version in `overlay\package.json`
+- builds the installer locally first
+- creates a `Release vX.Y.Z` commit
+- creates and pushes a matching `vX.Y.Z` tag
+- triggers `.github/workflows/release.yml`, which rebuilds on `windows-latest` and attaches the installer, blockmap, and checksum to the GitHub Release
+
+Why use Actions for the actual release assets:
+
+- the official release is built from a tagged commit inside GitHub, not from a one-off local machine state
+- the GitHub Release remains reproducible and tied to the exact source revision
+- reruns happen in CI if the publish step needs to be retried
+
 Backend build target:
 
 - Default: `bun-windows-x64`

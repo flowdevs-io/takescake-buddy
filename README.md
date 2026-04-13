@@ -66,6 +66,29 @@ There is also a release helper at the repo root:
 .\Build-Release.ps1 -Version patch
 ```
 
+To publish an official GitHub release, use:
+
+```powershell
+.\Build-Release.ps1 -Version patch -Publish
+```
+
+That flow:
+
+- requires a clean git working tree
+- bumps `overlay/package.json`
+- builds the Windows installer locally
+- creates a `Release vX.Y.Z` commit
+- creates and pushes a `vX.Y.Z` tag
+- lets GitHub Actions build the tagged commit on Windows and publish the release assets
+
+## GitHub releases
+
+The repo includes a tag-driven workflow at `.github/workflows/release.yml`.
+
+- pushing a tag like `v1.0.18` triggers a Windows build on GitHub Actions
+- the workflow publishes the installer `.exe`, its `.blockmap`, and a `.sha256` checksum to the GitHub Release
+- the local script is the intended entry point so the package version, git commit, tag, and release stay aligned
+
 ## Notes
 
 - Large generated assets, package output, local card image caches, and sqlite runtime files are intentionally ignored by Git.
