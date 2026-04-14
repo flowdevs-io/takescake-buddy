@@ -1,24 +1,29 @@
 .claude/
-
+ 
 # OS/editor noise
 .DS_Store
 Thumbs.db
-
+ 
 # Build outputs
 *.bun-build
 .18a583bfa7afff7c-00000000.bun-build
 overlay/dist/
 overlay/dist-app/
+overlay/dist-app-*/
 overlay/out/
-
+dist-release/
+dist-app-validation/
+overlay/dist-app-validation/
+.release-staging/
+ 
 # Dependencies
 node_modules/
 overlay/node_modules/
-
+ 
 # Python cache
 __pycache__/
 *.pyc
-
+ 
 # Runtime data and temporary files
 scraper/card_images/
 scraper/history.sqlite

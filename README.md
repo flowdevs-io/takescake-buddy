@@ -31,6 +31,8 @@ Start the Electron app:
 npm start
 ```
 
+`npm start` rebuilds `electron-overlay-window` for the Electron binary that is actually installed in `overlay/node_modules` when the native overlay backend is in use. On Windows ARM64, the app now uses a PowerShell-based window tracker instead of the native addon, so local ARM runs no longer depend on a native overlay rebuild.
+
 ## Build the backend binaries
 
 From `overlay/`:
@@ -60,10 +62,35 @@ Installer output is written to:
 overlay\dist-app
 ```
 
+To build a specific Windows architecture directly, set the matching Bun target and pass the matching `electron-builder` flag:
+
+```powershell
+npm run make:arm64
+```
+
+`make:x64`, `make:arm64`, `package:x64`, and `package:arm64` automatically choose the matching Bun backend target unless you explicitly override `BUN_BACKEND_TARGET` yourself.
+
+Windows ARM64 packaging requires Bun 1.3.12 or newer.
+The packaged ARM64 app uses a PowerShell-based overlay tracker instead of `electron-overlay-window`, so local ARM64 builds no longer require the Visual Studio ARM64 C++ toolchain.
+
 There is also a release helper at the repo root:
 
 ```powershell
 .\Build-Release.ps1 -Version patch
+```
+
+That command builds the x64 installer locally.
+
+To build only the arm64 installer locally, use:
+
+```powershell
+.\Build-Release.ps1 -Version patch -Architectures arm64
+```
+
+To build both local installers, use:
+
+```powershell
+.\Build-Release.ps1 -Version patch -Architectures x64,arm64
 ```
 
 To publish an official GitHub release, use:
@@ -76,17 +103,23 @@ That flow:
 
 - requires a clean git working tree
 - bumps `overlay/package.json`
-- builds the Windows installer locally
+- builds the Windows x64 installer locally by default
 - creates a `Release vX.Y.Z` commit
 - creates and pushes a `vX.Y.Z` tag
-- lets GitHub Actions build the tagged commit on Windows and publish the release assets
+- lets GitHub Actions build and publish both x64 and arm64 release assets
+
+Release helper output is written to:
+
+```text
+dist-release
+```
 
 ## GitHub releases
 
 The repo includes a tag-driven workflow at `.github/workflows/release.yml`.
 
 - pushing a tag like `v1.0.18` triggers a Windows build on GitHub Actions
-- the workflow publishes the installer `.exe`, its `.blockmap`, and a `.sha256` checksum to the GitHub Release
+- the workflow publishes x64 and arm64 installers, each with a `.blockmap` and a `.sha256` checksum, to the GitHub Release
 - the local script is the intended entry point so the package version, git commit, tag, and release stay aligned
 
 ## Notes
