@@ -1,11 +1,24 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const { rebuild } = require('@electron/rebuild');
 const { shouldRebuildNativeOverlay } = require('../overlay-runtime-config');
 
 const VALID_ARCHS = new Set(['x64', 'arm64']);
 const overlayDir = path.resolve(__dirname, '..');
+let rebuildModulePromise;
+
+async function getElectronRebuild() {
+  if (!rebuildModulePromise) {
+    rebuildModulePromise = import('@electron/rebuild');
+  }
+
+  const rebuildModule = await rebuildModulePromise;
+  if (typeof rebuildModule.rebuild !== 'function') {
+    throw new Error('Failed to load @electron/rebuild. Expected a named rebuild export.');
+  }
+
+  return rebuildModule.rebuild;
+}
 
 function readPeMachine(filePath) {
   const buffer = fs.readFileSync(filePath);
@@ -137,6 +150,7 @@ async function rebuildOverlayWindow(targetArch) {
   }
 
   const electronVersion = getElectronVersion();
+  const rebuild = await getElectronRebuild();
   console.log(`[overlay:rebuild] Rebuilding electron-overlay-window for Electron ${electronVersion} (${targetArch})`);
 
   if (process.platform === 'win32') {

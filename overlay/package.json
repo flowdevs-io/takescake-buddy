@@ -1,7 +1,7 @@
 {
   "name": "mtga-overlay",
   "productName": "MTGA Tracker",
-  "version": "2.0.8",
+  "version": "2.0.9",
   "description": "MTG Arena Draw Odds Overlay",
   "author": "MTGA Tracker",
   "main": "index.js",
