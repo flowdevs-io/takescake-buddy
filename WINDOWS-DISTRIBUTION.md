@@ -30,12 +30,14 @@ overlay\dist-app
 To build a native Windows ARM64 installer directly from `overlay/`:
 
 ```powershell
-$env:BUN_BACKEND_TARGET = "bun-windows-arm64"
-npm run make -- --arm64
+npm run make:arm64
 ```
 
+`npm start`, `npm run make`, and `npm run package` rebuild `electron-overlay-window` for the Electron target architecture when the native overlay backend is in use. On Windows ARM64, the packaged app now uses a PowerShell-based window tracker instead of the native addon.
+The architecture-specific `make:*` and `package:*` scripts also select the matching Bun backend target automatically unless `BUN_BACKEND_TARGET` is already set.
+
 Windows ARM64 packaging requires Bun 1.3.12 or newer.
-Local ARM64 packaging also requires the Visual Studio Desktop development with C++ workload and the ARM64 MSVC tools because `electron-overlay-window` is rebuilt natively.
+Local ARM64 packaging no longer requires the Visual Studio ARM64 C++ toolchain for the overlay path.
 
 Release helper assets are written to:
 
@@ -110,8 +112,7 @@ npm run backend:build
 For native ARM64 packaging, use:
 
 ```powershell
-$env:BUN_BACKEND_TARGET = "bun-windows-arm64"
-npm run make -- --arm64
+npm run make:arm64
 ```
 
 Note:

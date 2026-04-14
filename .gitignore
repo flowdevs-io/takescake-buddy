@@ -9,6 +9,7 @@ Thumbs.db
 .18a583bfa7afff7c-00000000.bun-build
 overlay/dist/
 overlay/dist-app/
+overlay/dist-app-*/
 overlay/out/
 dist-release/
 dist-app-validation/

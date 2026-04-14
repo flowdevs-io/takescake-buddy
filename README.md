@@ -31,6 +31,8 @@ Start the Electron app:
 npm start
 ```
 
+`npm start` rebuilds `electron-overlay-window` for the Electron binary that is actually installed in `overlay/node_modules` when the native overlay backend is in use. On Windows ARM64, the app now uses a PowerShell-based window tracker instead of the native addon, so local ARM runs no longer depend on a native overlay rebuild.
+
 ## Build the backend binaries
 
 From `overlay/`:
@@ -63,12 +65,13 @@ overlay\dist-app
 To build a specific Windows architecture directly, set the matching Bun target and pass the matching `electron-builder` flag:
 
 ```powershell
-$env:BUN_BACKEND_TARGET = "bun-windows-arm64"
-npm run make -- --arm64
+npm run make:arm64
 ```
 
+`make:x64`, `make:arm64`, `package:x64`, and `package:arm64` automatically choose the matching Bun backend target unless you explicitly override `BUN_BACKEND_TARGET` yourself.
+
 Windows ARM64 packaging requires Bun 1.3.12 or newer.
-Local ARM64 packaging also requires the Visual Studio Desktop development with C++ workload and the ARM64 MSVC tools because `electron-overlay-window` is rebuilt natively.
+The packaged ARM64 app uses a PowerShell-based overlay tracker instead of `electron-overlay-window`, so local ARM64 builds no longer require the Visual Studio ARM64 C++ toolchain.
 
 There is also a release helper at the repo root:
 

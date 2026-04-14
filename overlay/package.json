@@ -1,18 +1,23 @@
 {
   "name": "mtga-overlay",
   "productName": "MTGA Tracker",
-  "version": "2.0.7",
+  "version": "2.0.8",
   "description": "MTG Arena Draw Odds Overlay",
   "author": "MTGA Tracker",
   "main": "index.js",
   "scripts": {
-    "start": "electron .",
+    "start": "node ./scripts/rebuild-overlay-window.js && electron .",
+    "overlay:rebuild": "node ./scripts/rebuild-overlay-window.js",
+    "overlay:rebuild:x64": "node ./scripts/rebuild-overlay-window.js x64",
+    "overlay:rebuild:arm64": "node ./scripts/rebuild-overlay-window.js arm64",
     "backend:build": "node ./scripts/build-backend.js",
     "scraper:build": "node ./scripts/build-scraper.js",
-    "package": "npm run backend:build && npm run scraper:build && electron-builder build --dir",
-    "make": "npm run backend:build && npm run scraper:build && electron-builder build --win",
-    "make:x64": "npm run backend:build && npm run scraper:build && electron-builder build --win --x64",
-    "make:arm64": "npm run backend:build && npm run scraper:build && electron-builder build --win --arm64"
+    "package": "node ./scripts/build-electron.js --dir",
+    "package:x64": "node ./scripts/build-electron.js --dir --x64",
+    "package:arm64": "node ./scripts/build-electron.js --dir --arm64",
+    "make": "node ./scripts/build-electron.js --win",
+    "make:x64": "node ./scripts/build-electron.js --win --x64",
+    "make:arm64": "node ./scripts/build-electron.js --win --arm64"
   },
   "build": {
     "appId": "com.mtgatracker.app",
@@ -45,6 +50,7 @@
     }
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.0.3",
     "electron": "^41.2.0",
     "electron-builder": "^26.8.1"
   },

@@ -216,10 +216,6 @@ function Assert-LocalBuildToolchainSupportsRequestedArchitectures {
         [Parameter(Mandatory=$true)]
         [string[]]$Architectures
     )
-
-    if ($Architectures -contains "arm64") {
-        Assert-Arm64NativeBuildToolchainAvailable
-    }
 }
 
 function Get-BunTargetForArchitecture {

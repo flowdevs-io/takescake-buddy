@@ -3,10 +3,50 @@ const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 const net = require('node:net');
-const { OverlayController, OVERLAY_WINDOW_OPTS } = require('electron-overlay-window');
+const { getOverlayRuntimeDecision } = require('./overlay-runtime-config');
 
 // MTGA window title — Steam version uses 'MTGA'
-const MTGA_WINDOW_TITLE = 'MTGA';
+function loadOverlayRuntime() {
+  const runtimeDecision = getOverlayRuntimeDecision();
+
+  if (runtimeDecision.mode === 'fallback') {
+    return {
+      ...require('./windows-overlay-fallback'),
+      label: 'powershell-fallback',
+      reason: runtimeDecision.reason
+    };
+  }
+
+  try {
+    return {
+      ...require('electron-overlay-window'),
+      label: 'native',
+      reason: runtimeDecision.reason
+    };
+  } catch (error) {
+    if (process.platform !== 'win32') {
+      throw error;
+    }
+
+    const renderedError = error instanceof Error ? error.message : String(error);
+    console.warn(`[overlay] Native overlay runtime failed to load, switching to the PowerShell fallback: ${renderedError}`);
+
+    return {
+      ...require('./windows-overlay-fallback'),
+      label: 'powershell-fallback',
+      reason: `native load failed: ${renderedError}`
+    };
+  }
+}
+
+const {
+  OverlayController,
+  OVERLAY_WINDOW_OPTS,
+  label: overlayRuntimeLabel,
+  reason: overlayRuntimeReason
+} = loadOverlayRuntime();
+
+const MTGA_WINDOW_TITLES = ['MTGA', 'Magic: The Gathering Arena'];
 
 let overlayWin;
 let launcherWin;
@@ -229,6 +269,8 @@ function stopScraper() {
 }
 
 function createWindows() {
+  console.log(`[overlay] Using ${overlayRuntimeLabel} runtime (${overlayRuntimeReason})`);
+
   launcherWin = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -271,7 +313,11 @@ function createWindows() {
   overlayWin.setIgnoreMouseEvents(true, { forward: true });
 
   // Attach the overlay to the MTGA game window
-  OverlayController.attachByTitle(overlayWin, MTGA_WINDOW_TITLE);
+  if (typeof OverlayController.attachByTitles === 'function') {
+    OverlayController.attachByTitles(overlayWin, MTGA_WINDOW_TITLES);
+  } else {
+    OverlayController.attachByTitle(overlayWin, MTGA_WINDOW_TITLES[0]);
+  }
 
   OverlayController.events.on('attach', () => {
     console.log('[overlay] Attached to MTGA — game window found');
@@ -281,8 +327,8 @@ function createWindows() {
     console.log('[overlay] Detached — MTGA closed or lost');
   });
 
-  OverlayController.events.on('fullscreen', (e, isFullscreen) => {
-    console.log('[overlay] Fullscreen:', isFullscreen);
+  OverlayController.events.on('fullscreen', (event) => {
+    console.log('[overlay] Fullscreen:', event?.isFullscreen);
   });
 }
 
@@ -419,6 +465,9 @@ if (!gotTheLock) {
 
   app.on('before-quit', () => {
     isAppQuitting = true;
+    if (typeof OverlayController.dispose === 'function') {
+      OverlayController.dispose();
+    }
     stopBackend();
     stopScraper();
   });
