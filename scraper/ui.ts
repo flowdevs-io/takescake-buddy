@@ -3655,11 +3655,11 @@ function esc(s) {
 
 const COLOR_STRIPE = {
     W: 'linear-gradient(180deg, #ffffff 0%, #cbd5e1 100%)',
-    U: 'linear-gradient(180deg, #60a5fa 0%, #1d4ed8 100%)',
-    B: 'linear-gradient(180deg, #a855f7 0%, #4c1d95 100%)',
-    R: 'linear-gradient(180deg, #f87171 0%, #991b1b 100%)',
-    G: 'linear-gradient(180deg, #4ade80 0%, #065f46 100%)',
-    C: 'linear-gradient(180deg, #94a3b8 0%, #1e293b 100%)',
+    U: 'linear-gradient(180deg, #0ea5e9 0%, #2563eb 100%)',
+    B: 'linear-gradient(180deg, #6366f1 0%, #1e1b4b 100%)',
+    R: 'linear-gradient(180deg, #f43f5e 0%, #9f1239 100%)',
+    G: 'linear-gradient(180deg, #10b981 0%, #064e3b 100%)',
+    C: 'linear-gradient(180deg, #94a3b8 0%, #334155 100%)',
 };
 
 function stripeStyle(colors) {
@@ -4064,9 +4064,9 @@ ev.addEventListener('state-update', e => render(JSON.parse(e.data)));
             --line: rgba(255, 255, 255, 0.08);
             --ink: #f1f5f9;
             --muted: #64748b;
-            --orange: #f97316;
-            --orange-glow: rgba(249, 115, 22, 0.4);
-            --cyan: #38bdf8;
+            --orange: #f43f5e;
+            --orange-glow: rgba(244, 63, 94, 0.4);
+            --cyan: #0ea5e9;
             --metallic-border: linear-gradient(135deg, rgba(255,255,255,0.12), rgba(255,255,255,0.02) 50%, rgba(255,255,255,0.08));
         }
         @keyframes gradient-shift {
