@@ -122,19 +122,33 @@ public static class OverlayWin32
     [DllImport("user32.dll")]
     private static extern IntPtr MonitorFromWindow(IntPtr hWnd, uint dwFlags);
 
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern IntPtr OpenDesktop(string lpszDesktop, uint dwFlags, bool fInherit, uint dwDesiredAccess);
+
+    [DllImport("user32.dll")]
+    private static extern bool CloseDesktop(IntPtr hDesktop);
+
+    [DllImport("user32.dll")]
+    private static extern bool EnumDesktopWindows(IntPtr hDesktop, EnumWindowsProc lpfn, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern bool GetMonitorInfoW(IntPtr hMonitor, ref MONITORINFO lpmi);
 
     private static bool IsMatchingWindowTitle(string title, string[] candidateTitles)
     {
+        if (string.IsNullOrWhiteSpace(title)) return false;
+
         foreach (var candidateTitle in candidateTitles)
         {
-            if (String.Equals(title, candidateTitle, StringComparison.Ordinal))
+            if (String.Equals(title, candidateTitle, StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
 
-            if (candidateTitle.Length > 4 && title.IndexOf(candidateTitle, StringComparison.OrdinalIgnoreCase) >= 0)
+            if (candidateTitle.Length >= 4 && title.IndexOf(candidateTitle, StringComparison.OrdinalIgnoreCase) >= 0)
             {
                 return true;
             }
@@ -143,11 +157,25 @@ public static class OverlayWin32
         return false;
     }
 
+    private static bool IsMatchingProcess(IntPtr hWnd)
+    {
+        uint pid;
+        GetWindowThreadProcessId(hWnd, out pid);
+        if (pid == 0) return false;
+        try {
+            var proc = System.Diagnostics.Process.GetProcessById((int)pid);
+            if (proc.ProcessName.IndexOf("MTGA", StringComparison.OrdinalIgnoreCase) >= 0) {
+                return true;
+            }
+        } catch {}
+        return false;
+    }
+
     private static IntPtr FindWindowByTitle(string[] candidateTitles)
     {
         IntPtr foundWindow = IntPtr.Zero;
 
-        EnumWindows((hWnd, _lParam) =>
+        EnumWindowsProc evaluateWindow = (hWnd, _lParam) =>
         {
             if (!IsWindowVisible(hWnd))
             {
@@ -155,25 +183,46 @@ public static class OverlayWin32
             }
 
             int titleLength = GetWindowTextLengthW(hWnd);
-            if (titleLength <= 0)
+            if (titleLength > 0)
             {
-                return true;
+                var titleBuilder = new StringBuilder(titleLength + 1);
+                if (GetWindowTextW(hWnd, titleBuilder, titleBuilder.Capacity) > 0)
+                {
+                    if (IsMatchingWindowTitle(titleBuilder.ToString(), candidateTitles))
+                    {
+                        foundWindow = hWnd;
+                        return false;
+                    }
+                }
             }
 
-            var titleBuilder = new StringBuilder(titleLength + 1);
-            if (GetWindowTextW(hWnd, titleBuilder, titleBuilder.Capacity) <= 0)
+            // Fallback: check if window belongs to MTGA process with reasonable dimensions
+            if (IsMatchingProcess(hWnd))
             {
-                return true;
+                RECT r;
+                if (GetClientRect(hWnd, out r) && (r.Right - r.Left) > 300)
+                {
+                    foundWindow = hWnd;
+                    return false;
+                }
             }
 
-            if (!IsMatchingWindowTitle(titleBuilder.ToString(), candidateTitles))
-            {
-                return true;
-            }
+            return true;
+        };
 
-            foundWindow = hWnd;
-            return false;
-        }, IntPtr.Zero);
+        // Try standard desktop enumeration first
+        EnumWindows(evaluateWindow, IntPtr.Zero);
+
+        // If not found in current desktop, check Default user desktop
+        if (foundWindow == IntPtr.Zero)
+        {
+            IntPtr hDesktop = OpenDesktop("Default", 0, false, 0x01FF);
+            if (hDesktop != IntPtr.Zero)
+            {
+                EnumDesktopWindows(hDesktop, evaluateWindow, IntPtr.Zero);
+                CloseDesktop(hDesktop);
+            }
+        }
 
         return foundWindow;
     }
@@ -227,6 +276,18 @@ public static class OverlayWin32
             height = clientRect.Bottom - clientRect.Top;
         }
 
+        if (width <= 0 || height <= 0)
+        {
+            RECT windowRect;
+            if (GetWindowRect(hWnd, out windowRect))
+            {
+                clientPoint.X = windowRect.Left;
+                clientPoint.Y = windowRect.Top;
+                width = windowRect.Right - windowRect.Left;
+                height = windowRect.Bottom - windowRect.Top;
+            }
+        }
+
         bool isFullscreen = IsFullscreen(hWnd);
 
         return String.Format(
@@ -271,6 +332,7 @@ class WindowsOverlayFallbackController {
     this.targetHasFocus = false;
     this.lastIsFullscreen = false;
     this.isAttached = false;
+    this.pinned = true;
     this.focusNext = undefined;
     this.electronWindow = null;
     this.monitorProcess = null;
@@ -295,7 +357,7 @@ class WindowsOverlayFallbackController {
       this.handleFullscreen(event.isFullscreen);
       this.updateOverlayBounds();
 
-      if (event.isFocused) {
+      if (event.isFocused || this.pinned) {
         this.electronWindow.showInactive();
         this.electronWindow.setAlwaysOnTop(true, 'screen-saver');
       } else {
@@ -330,7 +392,7 @@ class WindowsOverlayFallbackController {
 
     this.events.on('blur', () => {
       this.targetHasFocus = false;
-      if (this.electronWindow && this.focusNext !== 'overlay' && !this.electronWindow.isFocused()) {
+      if (!this.pinned && this.electronWindow && this.focusNext !== 'overlay' && !this.electronWindow.isFocused()) {
         this.electronWindow.hide();
       }
     });
@@ -523,5 +585,6 @@ class WindowsOverlayFallbackController {
 
 module.exports = {
   OVERLAY_WINDOW_OPTS,
-  OverlayController: new WindowsOverlayFallbackController()
+  OverlayController: new WindowsOverlayFallbackController(),
+  buildPowerShellMonitorScript
 };

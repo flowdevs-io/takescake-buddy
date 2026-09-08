@@ -347,6 +347,19 @@ function createTray() {
         }
       }
     },
+    {
+      label: 'Toggle Overlay (Show/Hide)',
+      click: () => {
+        if (overlayWin && !overlayWin.isDestroyed()) {
+          if (overlayWin.isVisible()) {
+            overlayWin.hide();
+          } else {
+            overlayWin.showInactive();
+            overlayWin.setAlwaysOnTop(true, 'screen-saver');
+          }
+        }
+      }
+    },
     { type: 'separator' },
     {
       label: 'Quit Tracker',
@@ -439,6 +452,17 @@ if (!gotTheLock) {
   globalShortcut.register('Alt+Shift+O', () => {
     if (overlayWin && !overlayWin.isDestroyed()) {
       overlayWin.webContents.executeJavaScript('window.openOverlay && window.openOverlay()');
+    }
+  });
+
+  globalShortcut.register('Alt+Shift+V', () => {
+    if (overlayWin && !overlayWin.isDestroyed()) {
+      if (overlayWin.isVisible()) {
+        overlayWin.hide();
+      } else {
+        overlayWin.showInactive();
+        overlayWin.setAlwaysOnTop(true, 'screen-saver');
+      }
     }
   });
 

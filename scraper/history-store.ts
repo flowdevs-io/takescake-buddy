@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 
-const HISTORY_SCHEMA_VERSION = 3;
+const HISTORY_SCHEMA_VERSION = 4;
 
 export type CardSnapshot = {
     instanceId?: number | null;
@@ -508,6 +508,12 @@ function ensureHistorySchema(db: Database) {
             final_log_offset integer not null default 0,
             processed_bytes integer not null default 0,
             created_at integer not null,
+            updated_at integer not null
+        );
+
+        create table if not exists player_snapshots (
+            key text primary key,
+            data_json text not null,
             updated_at integer not null
         );
     `);
@@ -1195,8 +1201,35 @@ export function createHistoryStore(dbPath: string) {
                 recentGames,
                 recentMatches
             };
+        },
+
+        savePlayerSnapshot(key: string, data: unknown): void {
+            db.query(`
+                insert into player_snapshots (key, data_json, updated_at)
+                values ($key, $dataJson, $updatedAt)
+                on conflict(key) do update set
+                    data_json = excluded.data_json,
+                    updated_at = excluded.updated_at
+            `).run({
+                $key: key,
+                $dataJson: JSON.stringify(data),
+                $updatedAt: Date.now()
+            });
+        },
+
+        loadPlayerSnapshot<T>(key: string): T | null {
+            const row = db.query(`
+                select data_json from player_snapshots where key = $key limit 1
+            `).get({ $key: key }) as { data_json: string } | null;
+
+            if (!row || !row.data_json) return null;
+            try {
+                return JSON.parse(row.data_json) as T;
+            } catch {
+                return null;
             }
-            };
-            }
+        }
+    };
+}
 
      

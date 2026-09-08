@@ -31,10 +31,10 @@ function getOverlayRuntimeDecision(
     };
   }
 
-  if (platform === 'win32' && arch === 'arm64') {
+  if (platform === 'win32') {
     return {
       mode: 'fallback',
-      reason: 'Windows ARM64 uses the PowerShell overlay tracker'
+      reason: 'Windows uses the enhanced PowerShell overlay tracker'
     };
   }
 

@@ -87,6 +87,94 @@ type LiveArchiveState = {
     persisted: boolean;
 };
 
+export type PlayerEconomy = {
+    gold: number;
+    gems: number;
+    vaultProgress: number;
+    vaultProgressPercent: number;
+    wildcards: {
+        common: number;
+        uncommon: number;
+        rare: number;
+        mythic: number;
+    };
+    wcTrackPosition: number;
+    boosters?: Array<{ collationId: number; count: number }>;
+    updatedAt: number;
+};
+
+export type PlayerQuest = {
+    questId: string;
+    goal: number;
+    startingProgress: number;
+    endingProgress: number;
+    progress: number;
+    locKey: string;
+    title: string;
+    canSwap: boolean;
+    rewardGold?: number;
+    rewardXp?: number;
+};
+
+export type PlayerProgression = {
+    dailyWins: number;
+    dailyReset: string;
+    weeklyWins: number;
+    weeklyReset: string;
+    quests: PlayerQuest[];
+    canSwapQuest: boolean;
+    updatedAt: number;
+};
+
+export type PlayerRank = {
+    constructedClass: string;
+    constructedLevel: number;
+    constructedStep: number;
+    constructedMatchesWon: number;
+    constructedMatchesLost: number;
+    limitedClass?: string;
+    limitedLevel?: number;
+    seasonOrdinal?: number;
+    seasonStartTime?: string;
+    seasonEndTime?: string;
+    updatedAt: number;
+};
+
+let playerEconomy: PlayerEconomy = historyStore.loadPlayerSnapshot<PlayerEconomy>("player_economy") || {
+    gold: 0,
+    gems: 0,
+    vaultProgress: 0,
+    vaultProgressPercent: 0,
+    wildcards: { common: 0, uncommon: 0, rare: 0, mythic: 0 },
+    wcTrackPosition: 0,
+    boosters: [],
+    updatedAt: 0
+};
+
+let playerProgression: PlayerProgression = historyStore.loadPlayerSnapshot<PlayerProgression>("player_progression") || {
+    dailyWins: 0,
+    dailyReset: "",
+    weeklyWins: 0,
+    weeklyReset: "",
+    quests: [],
+    canSwapQuest: false,
+    updatedAt: 0
+};
+
+let playerRank: PlayerRank = historyStore.loadPlayerSnapshot<PlayerRank>("player_rank") || {
+    constructedClass: "Unranked",
+    constructedLevel: 1,
+    constructedStep: 0,
+    constructedMatchesWon: 0,
+    constructedMatchesLost: 0,
+    limitedClass: "Bronze",
+    limitedLevel: 1,
+    seasonOrdinal: 0,
+    seasonStartTime: "",
+    seasonEndTime: "",
+    updatedAt: 0
+};
+
 // --- Game State Engine ---
 let cardCache = {};
 let instanceToGrp = new Map();
@@ -2824,7 +2912,11 @@ function getEnhancedState() {
             topCard: drawnProbabilities[0] || null
         },
         gamesInMatch,
-        timeline: gameState.timeline
+        timeline: gameState.timeline,
+        playerEconomy,
+        playerProgression,
+        playerRank,
+        opponentCards: Array.from(liveArchive.cardsSeen.entries()).map(([name, count]) => ({ name, count }))
     };
 }
 
@@ -2947,6 +3039,113 @@ function handleLogObject(obj) {
             broadcast("state-update", getEnhancedState());
         }
         return;
+    }
+
+    // Parse Player Economy
+    const inv = obj.InventoryInfo || obj.inventoryInfo || obj.payload?.InventoryInfo || (obj.TotalVaultProgress !== undefined || obj.Gold !== undefined ? obj : null);
+    if (inv) {
+        const rawVault = Number(inv.TotalVaultProgress ?? inv.totalVaultProgress ?? inv.VaultProgress ?? playerEconomy.vaultProgress);
+        playerEconomy = {
+            gold: Number(inv.Gold ?? inv.gold ?? playerEconomy.gold),
+            gems: Number(inv.Gems ?? inv.gems ?? playerEconomy.gems),
+            vaultProgress: rawVault,
+            vaultProgressPercent: +(rawVault / 10).toFixed(1),
+            wildcards: {
+                common: Number(inv.WildCardCommons ?? inv.wildCardCommons ?? playerEconomy.wildcards.common),
+                uncommon: Number(inv.WildCardUnCommons ?? inv.wildCardUnCommons ?? playerEconomy.wildcards.uncommon),
+                rare: Number(inv.WildCardRares ?? inv.wildCardRares ?? playerEconomy.wildcards.rare),
+                mythic: Number(inv.WildCardMythics ?? inv.wildCardMythics ?? playerEconomy.wildcards.mythic)
+            },
+            wcTrackPosition: Number(inv.wcTrackPosition ?? playerEconomy.wcTrackPosition),
+            boosters: Array.isArray(inv.Boosters)
+                ? inv.Boosters.map((b: any) => ({ collationId: b.CollationId || b.collationId, count: b.Count || b.count }))
+                : playerEconomy.boosters,
+            updatedAt: Date.now()
+        };
+        historyStore.savePlayerSnapshot("player_economy", playerEconomy);
+        changed = true;
+    }
+
+    // Parse Quests
+    if (Array.isArray(obj.quests)) {
+        const quests: PlayerQuest[] = obj.quests.map((q: any) => {
+            const locKey = String(q.locKey || "");
+            const title = locKey.replace(/^Quests\/Quest_/, "").replace(/_/g, " ") || "Daily Quest";
+            let rewardGold = 500;
+            let rewardXp = 500;
+            if (Array.isArray(q.rewards)) {
+                for (const r of q.rewards) {
+                    if (r.rewardType === "Gold" || r.rewardType === "Coins") rewardGold = Number(r.quantity) || rewardGold;
+                    if (r.rewardType === "XP") rewardXp = Number(r.quantity) || rewardXp;
+                }
+            } else if (q.chestDescription?.quantity) {
+                rewardGold = Number(q.chestDescription.quantity) || rewardGold;
+            }
+            return {
+                questId: String(q.questId || ""),
+                goal: Number(q.goal || 0),
+                startingProgress: Number(q.startingProgress || 0),
+                endingProgress: Number(q.endingProgress || 0),
+                progress: Number(q.endingProgress ?? q.startingProgress ?? 0),
+                locKey,
+                title,
+                canSwap: Boolean(q.canSwap),
+                rewardGold,
+                rewardXp
+            };
+        });
+        playerProgression = {
+            ...playerProgression,
+            quests,
+            canSwapQuest: Boolean(obj.canSwap ?? playerProgression.canSwapQuest),
+            updatedAt: Date.now()
+        };
+        historyStore.savePlayerSnapshot("player_progression", playerProgression);
+        changed = true;
+    }
+
+    // Parse Periodic Rewards (Daily/Weekly win sequences)
+    if (obj._dailyRewardResetTimestamp !== undefined || obj._dailyRewardSequenceId !== undefined) {
+        playerProgression = {
+            ...playerProgression,
+            dailyWins: Number(obj._dailyRewardSequenceId ?? playerProgression.dailyWins),
+            dailyReset: String(obj._dailyRewardResetTimestamp ?? playerProgression.dailyReset),
+            weeklyWins: Number(obj._weeklyRewardSequenceId ?? playerProgression.weeklyWins),
+            weeklyReset: String(obj._weeklyRewardResetTimestamp ?? playerProgression.weeklyReset),
+            updatedAt: Date.now()
+        };
+        historyStore.savePlayerSnapshot("player_progression", playerProgression);
+        changed = true;
+    }
+
+    // Parse Combined Rank Info
+    if (obj.constructedClass !== undefined || obj.constructedSeasonOrdinal !== undefined) {
+        playerRank = {
+            ...playerRank,
+            constructedClass: String(obj.constructedClass ?? playerRank.constructedClass),
+            constructedLevel: Number(obj.constructedLevel ?? playerRank.constructedLevel),
+            constructedStep: Number(obj.constructedStep ?? playerRank.constructedStep),
+            constructedMatchesWon: Number(obj.constructedMatchesWon ?? playerRank.constructedMatchesWon),
+            constructedMatchesLost: Number(obj.constructedMatchesLost ?? playerRank.constructedMatchesLost),
+            limitedLevel: Number(obj.limitedLevel ?? playerRank.limitedLevel),
+            seasonOrdinal: Number(obj.constructedSeasonOrdinal ?? playerRank.seasonOrdinal),
+            updatedAt: Date.now()
+        };
+        historyStore.savePlayerSnapshot("player_rank", playerRank);
+        changed = true;
+    }
+
+    // Parse Season Details
+    if (obj.currentSeason) {
+        playerRank = {
+            ...playerRank,
+            seasonOrdinal: Number(obj.currentSeason.seasonOrdinal ?? playerRank.seasonOrdinal),
+            seasonStartTime: String(obj.currentSeason.seasonStartTime ?? playerRank.seasonStartTime),
+            seasonEndTime: String(obj.currentSeason.seasonEndTime ?? playerRank.seasonEndTime),
+            updatedAt: Date.now()
+        };
+        historyStore.savePlayerSnapshot("player_rank", playerRank);
+        changed = true;
     }
 
     if (changed) {
@@ -3077,6 +3276,140 @@ function closeTrackerRun() {
     persistRuntimeState(Date.now());
 }
 
+function findCardInCatalog(nameOrGrp: string | number) {
+    if (typeof nameOrGrp === "number" || /^\d+$/.test(String(nameOrGrp))) {
+        return (cardCache as Record<string, any>)[String(nameOrGrp)];
+    }
+    const clean = String(nameOrGrp).toLowerCase().trim();
+    for (const card of Object.values(cardCache) as any[]) {
+        if (card && card.name && card.name.toLowerCase() === clean) return card;
+    }
+    return null;
+}
+
+function getOwnedCount(cardName: string): number {
+    let total = 0;
+    const clean = cardName.toLowerCase().trim();
+    for (const [grpId, count] of collectionIndex.entries()) {
+        const card = (cardCache as Record<string, any>)[String(grpId)];
+        if (card && card.name && card.name.toLowerCase() === clean) {
+            total += count;
+        }
+    }
+    return total;
+}
+
+function calculateDeckCraftingCost(deckInput: { cards?: Array<{ name?: string; quantity?: number; grpId?: number }>; text?: string }) {
+    let list: Array<{ name: string; quantity: number; grpId?: number }> = [];
+
+    if (Array.isArray(deckInput.cards)) {
+        list = deckInput.cards.map((c) => ({
+            name: String(c.name || ""),
+            quantity: Number(c.quantity || 1),
+            grpId: c.grpId ? Number(c.grpId) : undefined
+        }));
+    } else if (typeof deckInput.text === "string") {
+        for (const line of deckInput.text.split("\n")) {
+            const m = line.trim().match(/^(\d+)\s+(.+?)(?:\s+\([A-Z0-9]+\)\s+\d+)?$/);
+            if (m) {
+                list.push({ quantity: parseInt(m[1], 10), name: m[2].trim() });
+            }
+        }
+    }
+
+    const missingWildcards = { common: 0, uncommon: 0, rare: 0, mythic: 0 };
+    const missingCards: Array<{ name: string; rarity: string; missing: number; owned: number; required: number }> = [];
+
+    for (const entry of list) {
+        if (!entry.name) continue;
+        const lowerName = entry.name.toLowerCase();
+        if (["plains", "island", "swamp", "mountain", "forest", "wastes"].includes(lowerName)) {
+            continue;
+        }
+
+        const owned = entry.grpId ? (collectionIndex.get(entry.grpId) || 0) : getOwnedCount(entry.name);
+        const missing = Math.max(0, entry.quantity - owned);
+        if (missing > 0) {
+            const cardInfo = (entry.grpId ? (cardCache as Record<string, any>)[String(entry.grpId)] : null) || findCardInCatalog(entry.name);
+            const rawRarity = String(cardInfo?.rarity || "rare").toLowerCase();
+            const rarity: "common" | "uncommon" | "rare" | "mythic" =
+                rawRarity.includes("mythic") ? "mythic" :
+                rawRarity.includes("rare") ? "rare" :
+                rawRarity.includes("uncommon") ? "uncommon" : "common";
+
+            missingWildcards[rarity] += missing;
+            missingCards.push({
+                name: entry.name,
+                rarity,
+                missing,
+                owned,
+                required: entry.quantity
+            });
+        }
+    }
+
+    const available = playerEconomy.wildcards;
+    const canCraft =
+        available.common >= missingWildcards.common &&
+        available.uncommon >= missingWildcards.uncommon &&
+        available.rare >= missingWildcards.rare &&
+        available.mythic >= missingWildcards.mythic;
+
+    return {
+        canCraft,
+        missingWildcards,
+        availableWildcards: available,
+        missingCards
+    };
+}
+
+function recoverTelemetryFromLog(logPath: string) {
+    if (!fs.existsSync(logPath)) return;
+    try {
+        const text = fs.readFileSync(logPath, "utf8");
+        const extractJsonAfter = (label: string) => {
+            const pos = text.lastIndexOf(label);
+            if (pos === -1) return null;
+            const start = text.indexOf("{", pos);
+            if (start === -1) return null;
+            let depth = 0;
+            for (let i = start; i < text.length; i++) {
+                if (text[i] === "{") depth++;
+                else if (text[i] === "}") {
+                    depth--;
+                    if (depth === 0) {
+                        try {
+                            return JSON.parse(text.slice(start, i + 1));
+                        } catch {
+                            return null;
+                        }
+                    }
+                }
+            }
+            return null;
+        };
+
+        const invObj = extractJsonAfter("InventoryInfo");
+        if (invObj) handleLogObject(invObj);
+
+        const rankObj = extractJsonAfter("<== RankGetCombinedRankInfo");
+        if (rankObj) handleLogObject(rankObj);
+
+        const questObj = extractJsonAfter("<== QuestGetQuests");
+        if (questObj) handleLogObject(questObj);
+
+        const periodicObj = extractJsonAfter("<== PeriodicRewardsGetStatus");
+        if (periodicObj) handleLogObject(periodicObj);
+
+        const seasonObj = extractJsonAfter("<== RankGetSeasonAndRankDetails");
+        if (seasonObj) handleLogObject(seasonObj);
+
+        console.log(`[telemetry] Recovered player telemetry: Gold=${playerEconomy.gold}, Gems=${playerEconomy.gems}, Rank=${playerRank.constructedClass} ${playerRank.constructedLevel}, DailyWins=${playerProgression.dailyWins}`);
+    } catch (err) {
+        console.error("[telemetry] Error recovering telemetry from log:", err);
+    }
+}
+
 async function runScan() {
     try {
         if (!fs.existsSync(LOG_PATH)) {
@@ -3092,6 +3425,8 @@ async function runScan() {
             bootSource: plan.bootSource,
             initialLogOffset: plan.startOffset
         });
+
+        recoverTelemetryFromLog(LOG_PATH);
 
         if (plan.startOffset < stats.size) {
             const stream = fs.createReadStream(LOG_PATH, { start: plan.startOffset });
@@ -3265,6 +3600,24 @@ Bun.serve({
             logPath: LOG_PATH
         }), { headers: { "Content-Type": "application/json" } });
     }
+    if (url.pathname === "/api/economy") {
+        return new Response(JSON.stringify(playerEconomy), { headers: { "Content-Type": "application/json" } });
+    }
+    if (url.pathname === "/api/progression") {
+        return new Response(JSON.stringify(playerProgression), { headers: { "Content-Type": "application/json" } });
+    }
+    if (url.pathname === "/api/rank") {
+        return new Response(JSON.stringify(playerRank), { headers: { "Content-Type": "application/json" } });
+    }
+    if (url.pathname === "/api/crafting-cost" && req.method === "POST") {
+        try {
+            const body = await req.json();
+            const result = calculateDeckCraftingCost(body);
+            return new Response(JSON.stringify(result), { headers: { "Content-Type": "application/json" } });
+        } catch (err) {
+            return new Response(JSON.stringify({ error: String(err) }), { status: 400, headers: { "Content-Type": "application/json" } });
+        }
+    }
     if (url.pathname === "/api/collection/summary") {
         refreshCollectionMemory();
         const query = url.searchParams.get("q") || undefined;
@@ -3380,7 +3733,7 @@ html, body {
     position: absolute;
     top: 24px;
     right: 24px;
-    width: 260px;
+    width: 290px;
     opacity: 0;
     transform: translateY(-12px);
     transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
@@ -3412,7 +3765,7 @@ html, body {
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-bottom: 1px solid rgba(0, 0, 0, 0.6);
     border-radius: 16px 16px 0 0;
-    padding: 12px 16px;
+    padding: 10px 14px;
     cursor: grab;
     user-select: none;
     position: relative;
@@ -3429,7 +3782,7 @@ html, body {
 .header-left {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
 }
 
 .drag-indicator {
@@ -3448,19 +3801,54 @@ html, body {
 #header-label {
     font-size: 10px;
     font-weight: 900;
-    letter-spacing: 0.3em;
+    letter-spacing: 0.25em;
     text-transform: uppercase;
     background: linear-gradient(90deg, #f97316, #fb923c);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     filter: drop-shadow(0 0 10px rgba(249,115,22,0.35));
 }
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
 #header-info {
     font-size: 9px;
     font-weight: 700;
-    color: #64748b;
-    letter-spacing: 0.1em;
+    color: #94a3b8;
+    letter-spacing: 0.05em;
     text-transform: uppercase;
+}
+.hdr-actions {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+}
+.hdr-btn {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+    color: #cbd5e1;
+    font-size: 8px;
+    font-weight: 800;
+    padding: 2px 5px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    user-select: none;
+    letter-spacing: 0.03em;
+    line-height: 1.2;
+}
+.hdr-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.35);
+}
+.hdr-btn.active {
+    background: #ea580c;
+    color: #ffffff;
+    border-color: #f97316;
+    box-shadow: 0 0 8px rgba(249, 115, 22, 0.5);
 }
 
 /* Card list */
@@ -3598,6 +3986,29 @@ body.interactive #widget::after {
     text-shadow: 0 1px 2px rgba(0,0,0,0.8);
 }
 
+#telemetry-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 14px;
+    background: rgba(10, 15, 29, 0.96);
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    color: #94a3b8;
+}
+.hud-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+.hud-rank { color: #f8fafc; font-weight: 900; }
+.hud-wins { color: #34d399; font-weight: 800; }
+.hud-wc { color: #cbd5e1; font-family: monospace; font-weight: 800; }
+
 </style>
 </head>
 <body>
@@ -3606,11 +4017,25 @@ body.interactive #widget::after {
         <div class="header-left">
             <div class="drag-indicator"><div></div><div></div><div></div></div>
             <span id="header-label">Draw Odds</span>
+            <button id="btnToggleOpp" class="hdr-btn" title="Toggle Deck / Opponent view">OPP</button>
         </div>
-        <span id="header-info">— / —</span>
+        <div class="header-right">
+            <span id="header-info">— / —</span>
+            <div class="hdr-actions">
+                <button id="btnScale" class="hdr-btn" title="Cycle Scale">1.0x</button>
+                <button id="btnOpacity" class="hdr-btn" title="Cycle Opacity">100%</button>
+                <button id="btnMin" class="hdr-btn" title="Minimize">_</button>
+                <button id="btnClose" class="hdr-btn" title="Close">×</button>
+            </div>
+        </div>
+    </div>
+    <div id="telemetry-bar">
+        <span class="hud-pill hud-rank">⚔️ Silver II</span>
+        <span class="hud-pill hud-wins">🏆 1/15</span>
+        <span class="hud-pill hud-wc">R:4 M:7</span>
     </div>
     <div id="list"></div>
-    <div class="hotkeys-help">Alt+Shift+M (Min) | +F (Focus) | +X (Close) | +O (Open)</div>
+    <div class="hotkeys-help">Alt+Shift+M (Min) | +F (Focus) | +X (Close) | +V (Show/Hide)</div>
 </div>
 
 <script>
@@ -3619,8 +4044,59 @@ const ev = new EventSource('/api/live-stream');
 
 const widget = document.getElementById('widget');
 const header = document.getElementById('header');
+const headerLabel = document.getElementById('header-label');
 const headerInfo = document.getElementById('header-info');
+const telemetryBar = document.getElementById('telemetry-bar');
 const list = document.getElementById('list');
+const btnToggleOpp = document.getElementById('btnToggleOpp');
+const btnScale = document.getElementById('btnScale');
+const btnOpacity = document.getElementById('btnOpacity');
+const btnMin = document.getElementById('btnMin');
+const btnClose = document.getElementById('btnClose');
+
+let viewMode = 'deck'; // 'deck' | 'opponent'
+const scaleLevels = [1.0, 0.85, 1.15];
+let scaleIdx = 0;
+const opacityLevels = [1.0, 0.85, 0.65];
+let opacityIdx = 0;
+let lastState = null;
+
+function applyScale() {
+    const scale = scaleLevels[scaleIdx % scaleLevels.length];
+    widget.style.transform = 'scale(' + scale + ')';
+    widget.style.transformOrigin = 'top right';
+    btnScale.textContent = scale + 'x';
+    try { localStorage.setItem('mtga_overlay_scale', String(scaleIdx % scaleLevels.length)); } catch (_) {}
+}
+
+function applyOpacity() {
+    const op = opacityLevels[opacityIdx % opacityLevels.length];
+    widget.style.opacity = String(op);
+    btnOpacity.textContent = Math.round(op * 100) + '%';
+    try { localStorage.setItem('mtga_overlay_opacity', String(opacityIdx % opacityLevels.length)); } catch (_) {}
+}
+
+try {
+    const savedPos = localStorage.getItem('mtga_overlay_pos');
+    if (savedPos) {
+        const parsed = JSON.parse(savedPos);
+        if (parsed && parsed.left && parsed.top) {
+            widget.style.right = 'auto';
+            widget.style.left = parsed.left;
+            widget.style.top = parsed.top;
+        }
+    }
+    const savedScale = localStorage.getItem('mtga_overlay_scale');
+    if (savedScale != null) {
+        scaleIdx = parseInt(savedScale, 10) || 0;
+        applyScale();
+    }
+    const savedOpacity = localStorage.getItem('mtga_overlay_opacity');
+    if (savedOpacity != null) {
+        opacityIdx = parseInt(savedOpacity, 10) || 0;
+        applyOpacity();
+    }
+} catch (e) {}
 
 // Window Controls API
 window.toggleMinimize = () => {
@@ -3633,16 +4109,46 @@ window.openOverlay = () => {
     widget.classList.remove('minimized');
 };
 
+btnMin.addEventListener('click', (e) => {
+    e.stopPropagation();
+    window.toggleMinimize();
+});
+
+btnClose.addEventListener('click', (e) => {
+    e.stopPropagation();
+    window.closeOverlay();
+});
+
+btnScale.addEventListener('click', (e) => {
+    e.stopPropagation();
+    scaleIdx = (scaleIdx + 1) % scaleLevels.length;
+    applyScale();
+});
+
+btnOpacity.addEventListener('click', (e) => {
+    e.stopPropagation();
+    opacityIdx = (opacityIdx + 1) % opacityLevels.length;
+    applyOpacity();
+});
+
+btnToggleOpp.addEventListener('click', (e) => {
+    e.stopPropagation();
+    viewMode = viewMode === 'deck' ? 'opponent' : 'deck';
+    btnToggleOpp.classList.toggle('active', viewMode === 'opponent');
+    btnToggleOpp.textContent = viewMode === 'deck' ? 'OPP' : 'DECK';
+    if (lastState) render(lastState);
+});
+
 // Dragging Logic
 let isDragging = false;
 let startX, startY, initialLeft, initialTop;
 
 header.addEventListener('mousedown', (e) => {
+    if (e.target.closest('button')) return;
     isDragging = true;
     startX = e.clientX;
     startY = e.clientY;
     
-    const style = window.getComputedStyle(widget);
     const rect = widget.getBoundingClientRect();
     initialLeft = rect.left;
     initialTop = rect.top;
@@ -3667,7 +4173,15 @@ window.addEventListener('mousemove', (e) => {
 });
 
 window.addEventListener('mouseup', () => {
-    isDragging = false;
+    if (isDragging) {
+        isDragging = false;
+        try {
+            localStorage.setItem('mtga_overlay_pos', JSON.stringify({
+                left: widget.style.left,
+                top: widget.style.top
+            }));
+        } catch (_) {}
+    }
 });
 
 function fmt(v) {
@@ -3708,31 +4222,80 @@ function formatCopyTotal(card) {
 }
 
 function render(state) {
+    lastState = state;
     const probs = state.probabilities || [];
     const lib = state.libraryCount || 0;
     const inGame = probs.length > 0 && lib > 0 && !state.gameEnded;
 
-    widget.classList.toggle('visible', inGame);
-    if (!inGame) return;
+    if (state.playerRank || state.playerProgression || state.playerEconomy) {
+        const r = state.playerRank?.constructedClass ? \`\${state.playerRank.constructedClass} \${state.playerRank.constructedLevel || ''}\` : '';
+        const w = state.playerProgression ? \`🏆 \${state.playerProgression.dailyWins || 0}/15\` : '';
+        const wc = state.playerEconomy?.wildcards ? \`R:\${state.playerEconomy.wildcards.rare} M:\${state.playerEconomy.wildcards.mythic}\` : '';
+        telemetryBar.innerHTML = \`<span class="hud-pill hud-rank">⚔️ \${r || 'MTGA'}</span><span class="hud-pill hud-wins">\${w}</span><span class="hud-pill hud-wc">\${wc}</span>\`;
+    }
 
-    headerInfo.textContent = lib + ' left · T' + (state.turn?.number || 0);
+    widget.classList.add('visible');
 
-    const top = probs.slice(0, MAX_CARDS);
-    list.innerHTML = top.map(p => {
-        const pct = Math.min(+(p.chance) || 0, 100);
-        return \`<div class="row">
-            <div class="row-fill" style="width:\${pct}%"></div>
-            <div class="row-stripe" style="\${stripeStyle(p.colors)}"></div>
-            <div class="row-left">
-                <div class="row-name">\${esc(p.name)}</div>
-                <div class="row-sub">\${renderColorBadges(p.colors)}<span class="row-copy">\${formatCopyTotal(p)} remaining</span></div>
+    if (viewMode === 'opponent') {
+        headerLabel.textContent = "Opponent Cards";
+        const oppCards = state.opponentCards || [];
+        const totalCount = oppCards.reduce((acc, c) => acc + (c.count || 1), 0);
+        headerInfo.textContent = totalCount + ' revealed';
+
+        if (oppCards.length === 0) {
+            list.innerHTML = \`
+                <div style="padding: 16px 14px; text-align: center;">
+                    <div style="font-size: 11px; font-weight: 800; color: #f8fafc; margin-bottom: 4px;">No Opponent Cards Yet</div>
+                    <div style="font-size: 9px; font-weight: 600; color: #64748b; line-height: 1.4;">Opponent cards will appear here as they are played or revealed.</div>
+                </div>
+            \`;
+        } else {
+            list.innerHTML = oppCards.slice(0, MAX_CARDS).map(c => {
+                return \`<div class="row">
+                    <div class="row-stripe" style="\${stripeStyle(c.colors)}"></div>
+                    <div class="row-left">
+                        <div class="row-name">\${esc(c.name)}</div>
+                        <div class="row-sub">\${renderColorBadges(c.colors)}<span class="row-copy">Seen in Match</span></div>
+                    </div>
+                    <div class="row-right">
+                        <div class="row-pct" style="color: #38bdf8;">×\${c.count || 1}</div>
+                    </div>
+                </div>\`;
+            }).join('');
+        }
+        return;
+    }
+
+    if (inGame) {
+        headerLabel.textContent = "Draw Odds";
+        headerInfo.textContent = lib + ' left · T' + (state.turn?.number || 0);
+
+        const top = probs.slice(0, MAX_CARDS);
+        list.innerHTML = top.map(p => {
+            const pct = Math.min(+(p.chance) || 0, 100);
+            return \`<div class="row">
+                <div class="row-fill" style="width:\${pct}%"></div>
+                <div class="row-stripe" style="\${stripeStyle(p.colors)}"></div>
+                <div class="row-left">
+                    <div class="row-name">\${esc(p.name)}</div>
+                    <div class="row-sub">\${renderColorBadges(p.colors)}<span class="row-copy">\${formatCopyTotal(p)} remaining</span></div>
+                </div>
+                <div class="row-right">
+                    <div class="row-pct">\${fmt(p.chance)}</div>
+                    <div class="row-in2">in 2 · <span>\${fmt(p.nextTwoChance)}</span></div>
+                </div>
+            </div>\`;
+        }).join('');
+    } else {
+        headerLabel.textContent = "MTGA Ready";
+        headerInfo.textContent = state.playerEconomy?.gold ? \`🪙 \${Number(state.playerEconomy.gold).toLocaleString()}\` : 'Standby';
+        list.innerHTML = \`
+            <div style="padding: 16px 14px; text-align: center;">
+                <div style="font-size: 11px; font-weight: 800; color: #f8fafc; margin-bottom: 4px;">Live Overlay Synced</div>
+                <div style="font-size: 9px; font-weight: 600; color: #64748b; line-height: 1.4;">Draw probability ledger activates automatically when match begins.</div>
             </div>
-            <div class="row-right">
-                <div class="row-pct">\${fmt(p.chance)}</div>
-                <div class="row-in2">in 2 · <span>\${fmt(p.nextTwoChance)}</span></div>
-            </div>
-        </div>\`;
-    }).join('');
+        \`;
+    }
 }
 
 ev.addEventListener('init', e => render(JSON.parse(e.data)));
@@ -4046,6 +4609,9 @@ ev.addEventListener('state-update', e => render(JSON.parse(e.data)));
                         </select>
                     </label>
                     <div class="flex flex-wrap gap-2.5 ml-auto">
+                        <button id="btnCraftCalc" class="rounded-[1.1rem] border border-amber-500/30 bg-amber-500/10 px-5 py-3 text-[9px] font-black uppercase tracking-[0.35em] text-amber-300 transition-all hover:bg-amber-500/20 active:scale-95 flex items-center gap-2">
+                            <span>🛠️</span> CRAFT CALCULATOR
+                        </button>
                         <button id="exportCsv" class="rounded-[1.1rem] border border-sky-500/30 bg-sky-500/10 px-5 py-3 text-[9px] font-black uppercase tracking-[0.35em] text-sky-300 transition-all hover:bg-sky-500/20 active:scale-95">CSV</button>
                         <button id="exportJson" class="rounded-[1.1rem] border border-orange-500/30 bg-orange-500/10 px-5 py-3 text-[9px] font-black uppercase tracking-[0.35em] text-orange-300 transition-all hover:bg-orange-500/20 active:scale-95">JSON</button>
                         <button id="exportLlm" class="rounded-[1.1rem] border border-purple-500/30 bg-purple-500/10 px-5 py-3 text-[9px] font-black uppercase tracking-[0.35em] text-purple-300 transition-all hover:bg-purple-500/20 active:scale-95">LLM</button>
@@ -4069,6 +4635,85 @@ ev.addEventListener('state-update', e => render(JSON.parse(e.data)));
 
             <!-- Card Grid -->
             <div id="collection" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-4 pb-24"></div>
+
+            <!-- Crafting Calculator Modal Drawer -->
+            <div id="craftModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md hidden transition-all duration-300">
+                <div class="relative w-full max-w-2xl rounded-[2.5rem] border border-white/12 bg-slate-950 p-8 shadow-[0_32px_100px_rgba(0,0,0,0.9)] text-left flex flex-col max-h-[90vh]">
+                    <!-- Header -->
+                    <div class="flex items-center justify-between pb-6 border-b border-white/8">
+                        <div class="flex items-center gap-3">
+                            <div class="w-9 h-9 rounded-xl flex items-center justify-center bg-amber-500/20 border border-amber-500/30 text-amber-400 font-black">
+                                🛠️
+                            </div>
+                            <div>
+                                <h2 class="text-xl font-black uppercase tracking-tight text-white">Wildcard Crafting Calculator</h2>
+                                <div class="text-[9px] font-bold uppercase tracking-[0.3em] text-slate-400">Validate Deck Cost Against Live Inventory</div>
+                            </div>
+                        </div>
+                        <button id="closeCraftModal" class="rounded-xl border border-white/10 bg-white/5 p-2 text-slate-400 hover:text-white hover:bg-white/10 transition-colors">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                        </button>
+                    </div>
+
+                    <!-- Scrollable Body -->
+                    <div class="overflow-y-auto flex-1 py-6 space-y-6 pr-1">
+                        <!-- Deck Source Selection / Textarea -->
+                        <div class="space-y-3">
+                            <div class="flex items-center justify-between">
+                                <label class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Decklist Input (MTGA Format)</label>
+                                <button id="btnUseLiveDeck" class="text-[9px] font-black uppercase tracking-[0.25em] text-orange-400 hover:text-orange-300 transition-colors">Use Active Match Deck</button>
+                            </div>
+                            <textarea id="craftDeckInput" rows="5" placeholder="Paste MTGA deck export format here, e.g.:
+4 Monastery Swiftspear
+4 Lightning Bolt (CLB) 187
+2 Bloodthirsty Adversary" class="w-full rounded-2xl border border-white/10 bg-black/60 p-4 font-mono text-xs text-slate-200 outline-none placeholder:text-slate-600 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/30"></textarea>
+                            <div class="flex items-center justify-between">
+                                <span class="text-[9px] font-semibold text-slate-500">Supports standard MTGA export notation (Deck / Sideboard headers handled).</span>
+                                <button id="btnRunCraftCalc" class="rounded-xl border border-amber-500/40 bg-amber-500/20 px-6 py-2.5 text-[10px] font-black uppercase tracking-[0.35em] text-amber-300 transition-all hover:bg-amber-500/30 active:scale-95">Calculate</button>
+                            </div>
+                        </div>
+
+                        <!-- Result Container -->
+                        <div id="craftResult" class="hidden space-y-5 pt-4 border-t border-white/8">
+                            <!-- Status Banner -->
+                            <div id="craftVerdictBanner" class="rounded-2xl border p-4 text-center">
+                                <div id="craftVerdictTitle" class="text-sm font-black uppercase tracking-wider"></div>
+                                <div id="craftVerdictSub" class="mt-1 text-xs text-slate-400"></div>
+                            </div>
+
+                            <!-- Wildcard Cost Grid -->
+                            <div class="grid grid-cols-4 gap-3 text-center">
+                                <div class="rounded-2xl border border-white/8 bg-slate-900/60 p-3">
+                                    <div class="text-[9px] font-black uppercase tracking-[0.25em] text-slate-400">Common</div>
+                                    <div id="costCommon" class="display-face text-2xl font-black text-slate-300 mt-1">0</div>
+                                    <div id="availCommon" class="text-[8px] font-bold text-slate-500 mt-1">Have: 0</div>
+                                </div>
+                                <div class="rounded-2xl border border-white/8 bg-slate-900/60 p-3">
+                                    <div class="text-[9px] font-black uppercase tracking-[0.25em] text-sky-400">Uncommon</div>
+                                    <div id="costUncommon" class="display-face text-2xl font-black text-sky-300 mt-1">0</div>
+                                    <div id="availUncommon" class="text-[8px] font-bold text-slate-500 mt-1">Have: 0</div>
+                                </div>
+                                <div class="rounded-2xl border border-white/8 bg-slate-900/60 p-3">
+                                    <div class="text-[9px] font-black uppercase tracking-[0.25em] text-amber-400">Rare</div>
+                                    <div id="costRare" class="display-face text-2xl font-black text-amber-300 mt-1">0</div>
+                                    <div id="availRare" class="text-[8px] font-bold text-slate-500 mt-1">Have: 0</div>
+                                </div>
+                                <div class="rounded-2xl border border-white/8 bg-slate-900/60 p-3">
+                                    <div class="text-[9px] font-black uppercase tracking-[0.25em] text-rose-400">Mythic</div>
+                                    <div id="costMythic" class="display-face text-2xl font-black text-rose-300 mt-1">0</div>
+                                    <div id="availMythic" class="text-[8px] font-bold text-slate-500 mt-1">Have: 0</div>
+                                </div>
+                            </div>
+
+                            <!-- Missing Cards Detail List -->
+                            <div>
+                                <div class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 mb-3">Cards to Craft (<span id="missingCardsCount">0</span>)</div>
+                                <div id="missingCardsList" class="space-y-2 max-h-48 overflow-y-auto pr-1"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
         </div>
         `;
@@ -4398,6 +5043,85 @@ ev.addEventListener('state-update', e => render(JSON.parse(e.data)));
 
     <!-- Main content -->
     <div class="main-content ${isOverlay ? 'p-2' : ''} ${isLauncher ? 'ml-0 p-6' : ''}">
+        <!-- Player Telemetry Strip -->
+        <div id="playerTelemetryStrip" class="${isOverlay ? 'hidden' : ''} mb-6 rounded-[2rem] border border-white/10 bg-slate-950/70 p-5 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.8)] backdrop-blur-2xl flex flex-wrap items-center justify-between gap-5">
+            <!-- Rank Block -->
+            <div class="flex items-center gap-3.5">
+                <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-500/20 to-orange-500/10 border border-amber-500/30 flex items-center justify-center text-amber-300 font-black text-sm shadow-[0_0_20px_-5px_rgba(245,158,11,0.3)]">
+                    ⚔️
+                </div>
+                <div>
+                    <div class="text-[8px] font-black uppercase tracking-[0.45em] text-slate-500">Constructed Rank</div>
+                    <div class="text-sm font-black text-white flex items-center gap-2 mt-0.5">
+                        <span id="rankClassTier">${playerRank.constructedClass || 'Unranked'} Tier ${playerRank.constructedLevel || 1}</span>
+                        <span id="rankRecord" class="text-[10px] font-bold text-slate-400 font-mono">(${playerRank.constructedMatchesWon || 0}W - ${playerRank.constructedMatchesLost || 0}L)</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Currency & Vault Block -->
+            <div class="flex items-center gap-5 border-l border-r border-white/8 px-6">
+                <div class="flex items-center gap-2.5">
+                    <span class="text-base">🪙</span>
+                    <div>
+                        <div class="text-[8px] font-black uppercase tracking-[0.4em] text-slate-500">Gold</div>
+                        <div id="goldAmount" class="text-xs font-black text-amber-400 font-mono">${(playerEconomy.gold || 0).toLocaleString()}</div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2.5">
+                    <span class="text-base">💎</span>
+                    <div>
+                        <div class="text-[8px] font-black uppercase tracking-[0.4em] text-slate-500">Gems</div>
+                        <div id="gemsAmount" class="text-xs font-black text-sky-400 font-mono">${(playerEconomy.gems || 0).toLocaleString()}</div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2.5">
+                    <span class="text-base">📦</span>
+                    <div>
+                        <div class="text-[8px] font-black uppercase tracking-[0.4em] text-slate-500">Vault Progress</div>
+                        <div id="vaultPercent" class="text-xs font-black text-purple-400 font-mono">${(playerEconomy.vaultProgressPercent || 0).toFixed(1)}%</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Wildcards Block -->
+            <div class="flex items-center gap-2">
+                <div class="text-[8px] font-black uppercase tracking-[0.45em] text-slate-500 mr-1.5">Wildcards:</div>
+                <span class="inline-flex items-center gap-1.5 rounded-xl border border-slate-700/80 bg-slate-900/80 px-2.5 py-1 text-[10px] font-black text-slate-300" title="Common Wildcards">
+                    <span class="w-2 h-2 rounded-full bg-slate-400"></span>
+                    <span id="wcCommon">${playerEconomy.wildcards?.common || 0}</span>
+                </span>
+                <span class="inline-flex items-center gap-1.5 rounded-xl border border-sky-700/50 bg-sky-950/50 px-2.5 py-1 text-[10px] font-black text-sky-300" title="Uncommon Wildcards">
+                    <span class="w-2 h-2 rounded-full bg-sky-400"></span>
+                    <span id="wcUncommon">${playerEconomy.wildcards?.uncommon || 0}</span>
+                </span>
+                <span class="inline-flex items-center gap-1.5 rounded-xl border border-amber-600/50 bg-amber-950/50 px-2.5 py-1 text-[10px] font-black text-amber-300" title="Rare Wildcards">
+                    <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+                    <span id="wcRare">${playerEconomy.wildcards?.rare || 0}</span>
+                </span>
+                <span class="inline-flex items-center gap-1.5 rounded-xl border border-orange-600/50 bg-orange-950/50 px-2.5 py-1 text-[10px] font-black text-orange-400" title="Mythic Wildcards">
+                    <span class="w-2 h-2 rounded-full bg-orange-500"></span>
+                    <span id="wcMythic">${playerEconomy.wildcards?.mythic || 0}</span>
+                </span>
+            </div>
+
+            <!-- Progression: Wins & Active Quest -->
+            <div class="flex items-center gap-5">
+                <div>
+                    <div class="text-[8px] font-black uppercase tracking-[0.4em] text-slate-500">Daily Wins</div>
+                    <div class="text-xs font-black text-emerald-400 flex items-center gap-1.5 mt-0.5">
+                        🏆 <span id="dailyWinsText">${playerProgression.dailyWins || 0} / 15</span>
+                    </div>
+                </div>
+                <div class="hidden xl:block">
+                    <div class="text-[8px] font-black uppercase tracking-[0.4em] text-slate-500">Active Quest</div>
+                    <div id="questTitle" class="text-xs font-bold text-slate-300 truncate max-w-[150px] mt-0.5" title="${playerProgression.quests?.[0]?.title || 'Daily Quest'}">
+                        ${playerProgression.quests?.[0] ? `${playerProgression.quests[0].title} (${playerProgression.quests[0].progress}/${playerProgression.quests[0].goal})` : 'All caught up'}
+                    </div>
+                </div>
+            </div>
+        </div>
+
         ${pageBody}
     </div>
 
@@ -4663,6 +5387,7 @@ ev.addEventListener('state-update', e => render(JSON.parse(e.data)));
             function applyState(s) {
                 latestState = s;
                 refreshMeta();
+                updateTelemetryBar(s);
 
                 const phaseLabel = [s.turn.phase, s.turn.step].filter(Boolean).join(' / ');
                 const metaParts = [];
@@ -5318,13 +6043,178 @@ ev.addEventListener('state-update', e => render(JSON.parse(e.data)));
             searchEl.addEventListener('input', () => applyFilters(allCards));
             sortEl.addEventListener('change', () => applyFilters(allCards));
             formatEl.addEventListener('change', () => applyFilters(allCards));
+
+            // Crafting Calculator Drawer Logic
+            const btnCraftCalc = document.getElementById('btnCraftCalc');
+            const craftModal = document.getElementById('craftModal');
+            const closeCraftModal = document.getElementById('closeCraftModal');
+            const craftDeckInput = document.getElementById('craftDeckInput');
+            const btnRunCraftCalc = document.getElementById('btnRunCraftCalc');
+            const btnUseLiveDeck = document.getElementById('btnUseLiveDeck');
+            const craftResult = document.getElementById('craftResult');
+            const craftVerdictBanner = document.getElementById('craftVerdictBanner');
+            const craftVerdictTitle = document.getElementById('craftVerdictTitle');
+            const craftVerdictSub = document.getElementById('craftVerdictSub');
+            const costCommon = document.getElementById('costCommon');
+            const costUncommon = document.getElementById('costUncommon');
+            const costRare = document.getElementById('costRare');
+            const costMythic = document.getElementById('costMythic');
+            const availCommon = document.getElementById('availCommon');
+            const availUncommon = document.getElementById('availUncommon');
+            const availRare = document.getElementById('availRare');
+            const availMythic = document.getElementById('availMythic');
+            const missingCardsCount = document.getElementById('missingCardsCount');
+            const missingCardsList = document.getElementById('missingCardsList');
+
+            if (btnCraftCalc && craftModal) {
+                btnCraftCalc.addEventListener('click', () => craftModal.classList.remove('hidden'));
+                if (closeCraftModal) closeCraftModal.addEventListener('click', () => craftModal.classList.add('hidden'));
+                craftModal.addEventListener('click', (e) => {
+                    if (e.target === craftModal) craftModal.classList.add('hidden');
+                });
+
+                if (btnUseLiveDeck) {
+                    btnUseLiveDeck.addEventListener('click', () => {
+                        fetch('/api/state')
+                            .then(r => r.json())
+                            .then(st => {
+                                if (st.deck && Array.isArray(st.deck) && st.deck.length) {
+                                    craftDeckInput.value = st.deck.map(c => (c.count || 1) + ' ' + c.name).join('\n');
+                                    runCalculation();
+                                } else {
+                                    alert('No active match deck found in memory.');
+                                }
+                            })
+                            .catch(() => alert('Could not fetch active match deck.'));
+                    });
+                }
+
+                if (btnRunCraftCalc) {
+                    btnRunCraftCalc.addEventListener('click', runCalculation);
+                }
+
+                function runCalculation() {
+                    const text = craftDeckInput.value.trim();
+                    if (!text) return;
+                    btnRunCraftCalc.disabled = true;
+                    btnRunCraftCalc.textContent = 'Calculating...';
+
+                    fetch('/api/crafting-cost', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text })
+                    })
+                    .then(r => r.json())
+                    .then(res => {
+                        btnRunCraftCalc.disabled = false;
+                        btnRunCraftCalc.textContent = 'Calculate';
+                        if (res.error) {
+                            alert('Calculation error: ' + res.error);
+                            return;
+                        }
+                        craftResult.classList.remove('hidden');
+                        const { canCraft, missingWildcards, availableWildcards, missingCards } = res;
+
+                        costCommon.textContent = (missingWildcards && missingWildcards.common) || 0;
+                        costUncommon.textContent = (missingWildcards && missingWildcards.uncommon) || 0;
+                        costRare.textContent = (missingWildcards && missingWildcards.rare) || 0;
+                        costMythic.textContent = (missingWildcards && missingWildcards.mythic) || 0;
+
+                        availCommon.textContent = 'Have: ' + ((availableWildcards && availableWildcards.common) || 0);
+                        availUncommon.textContent = 'Have: ' + ((availableWildcards && availableWildcards.uncommon) || 0);
+                        availRare.textContent = 'Have: ' + ((availableWildcards && availableWildcards.rare) || 0);
+                        availMythic.textContent = 'Have: ' + ((availableWildcards && availableWildcards.mythic) || 0);
+
+                        if (canCraft) {
+                            craftVerdictBanner.className = 'rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-center';
+                            craftVerdictTitle.className = 'text-sm font-black uppercase tracking-wider text-emerald-300';
+                            craftVerdictTitle.textContent = '✨ Ready to Craft Immediately!';
+                            craftVerdictSub.textContent = 'You have sufficient wildcards in your MTGA inventory to craft all missing cards.';
+                        } else {
+                            craftVerdictBanner.className = 'rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-center';
+                            craftVerdictTitle.className = 'text-sm font-black uppercase tracking-wider text-amber-300';
+                            const deficits = [];
+                            if (missingWildcards && availableWildcards) {
+                                if (missingWildcards.rare > (availableWildcards.rare || 0)) deficits.push((missingWildcards.rare - (availableWildcards.rare || 0)) + ' Rare');
+                                if (missingWildcards.mythic > (availableWildcards.mythic || 0)) deficits.push((missingWildcards.mythic - (availableWildcards.mythic || 0)) + ' Mythic');
+                            }
+                            craftVerdictTitle.textContent = deficits.length ? ('Missing ' + deficits.join(' & ') + ' Wildcards') : 'Additional Wildcards Needed';
+                            craftVerdictSub.textContent = 'Earn wildcards through packs, the vault, or reward tracks to finish this deck.';
+                        }
+
+                        missingCardsCount.textContent = (missingCards || []).length;
+                        if (!missingCards || missingCards.length === 0) {
+                            missingCardsList.innerHTML = '<div class="text-xs text-emerald-400 font-bold py-2 text-center">You already own all cards in this deck!</div>';
+                        } else {
+                            const rarityBadge = (r) => r === 'mythic' ? 'text-rose-400 border-rose-500/30 bg-rose-500/10' : r === 'rare' ? 'text-amber-400 border-amber-500/30 bg-amber-500/10' : r === 'uncommon' ? 'text-sky-400 border-sky-500/30 bg-sky-500/10' : 'text-slate-400 border-slate-500/30 bg-slate-500/10';
+                            missingCardsList.innerHTML = missingCards.map(c => 
+                                '<div class="flex items-center justify-between rounded-xl border border-white/6 bg-slate-900/50 px-3 py-2 text-xs">' +
+                                    '<div class="flex items-center gap-2">' +
+                                        '<span class="rounded px-1.5 py-0.5 text-[8px] font-black uppercase border ' + rarityBadge(c.rarity) + '">' + c.rarity + '</span>' +
+                                        '<span class="font-bold text-white">' + escapeHtml(c.name) + '</span>' +
+                                    '</div>' +
+                                    '<div class="text-[10px] font-black text-slate-400">' +
+                                        'Need <span class="text-amber-400 font-bold">' + c.missing + '</span> (Own ' + c.owned + '/' + c.required + ')' +
+                                    '</div>' +
+                                '</div>'
+                            ).join('');
+                        }
+                    })
+                    .catch(err => {
+                        btnRunCraftCalc.disabled = false;
+                        btnRunCraftCalc.textContent = 'Calculate';
+                        alert('Request failed: ' + err);
+                    });
+                }
+            }
         }
+
+        function updateTelemetryBar(state) {
+            if (!state) return;
+            if (state.playerEconomy) {
+                const goldEl = document.getElementById('goldAmount');
+                if (goldEl) goldEl.textContent = Number(state.playerEconomy.gold || 0).toLocaleString();
+                const gemsEl = document.getElementById('gemsAmount');
+                if (gemsEl) gemsEl.textContent = Number(state.playerEconomy.gems || 0).toLocaleString();
+                const vEl = document.getElementById('vaultPercent');
+                if (vEl) vEl.textContent = (state.playerEconomy.vaultProgressPercent || 0).toFixed(1) + '%';
+                if (state.playerEconomy.wildcards) {
+                    const wcc = document.getElementById('wcCommon');
+                    if (wcc) wcc.textContent = state.playerEconomy.wildcards.common;
+                    const wcu = document.getElementById('wcUncommon');
+                    if (wcu) wcu.textContent = state.playerEconomy.wildcards.uncommon;
+                    const wcr = document.getElementById('wcRare');
+                    if (wcr) wcr.textContent = state.playerEconomy.wildcards.rare;
+                    const wcm = document.getElementById('wcMythic');
+                    if (wcm) wcm.textContent = state.playerEconomy.wildcards.mythic;
+                }
+            }
+            if (state.playerRank) {
+                const rEl = document.getElementById('rankClassTier');
+                if (rEl) rEl.textContent = (state.playerRank.constructedClass || 'Unranked') + ' Tier ' + (state.playerRank.constructedLevel || 1);
+                const recEl = document.getElementById('rankRecord');
+                if (recEl) recEl.textContent = '(' + (state.playerRank.constructedMatchesWon || 0) + 'W - ' + (state.playerRank.constructedMatchesLost || 0) + 'L)';
+            }
+            if (state.playerProgression) {
+                const winEl = document.getElementById('dailyWinsText');
+                if (winEl) winEl.textContent = (state.playerProgression.dailyWins || 0) + ' / 15';
+                const qEl = document.getElementById('questTitle');
+                if (qEl && state.playerProgression.quests && state.playerProgression.quests[0]) {
+                    const q = state.playerProgression.quests[0];
+                    qEl.textContent = q.title + ' (' + q.progress + '/' + q.goal + ')';
+                    qEl.title = q.title + ': ' + q.progress + ' / ' + q.goal + ' (' + q.rewardGold + ' Gold)';
+                }
+            }
+        }
+        fetch('/api/state').then(r => r.json()).then(updateTelemetryBar).catch(() => {});
     </script>
 </body>
 </html>
     `, { headers: { "Content-Type": "text/html" } });
     }
 });
+
+recoverTelemetryFromLog(LOG_PATH);
 
 setTimeout(() => {
     void runScan();
