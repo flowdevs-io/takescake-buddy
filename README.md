@@ -122,7 +122,16 @@ The repo includes a tag-driven workflow at `.github/workflows/release.yml`.
 - the workflow publishes x64 and arm64 installers, each with a `.blockmap` and a `.sha256` checksum, to the GitHub Release
 - the local script is the intended entry point so the package version, git commit, tag, and release stay aligned
 
+## takescake.com Web Integration
+
+MTGA Tracker Pro integrates directly with [takescake.com](https://takescake.com):
+- **Web Distribution Portal**: Hosted on [takescake.com/download](https://takescake.com/download) with high-speed delivery and dynamic GitHub Release fallback (`/api/download`).
+- **Telemetry & Health Probe**: `takescake.com` client-side probes `http://localhost:3000/api/state` to detect when MTGA Tracker Pro is running and display active player rank, daily wins, and wildcard inventory.
+- **Bi-Directional Deck Studio Crafting Sync**: `POST /api/crafting-cost` calculates the exact rare and mythic wildcards needed for any deck built on `takescake.com` against the player's live local MTGA collection.
+- **Fair Play & WotC Compliance**: Fully transparent, log-reading only (`Player.log`), with zero memory injection and zero network packet sniffing.
+
 ## Notes
 
 - Large generated assets, package output, local card image caches, and sqlite runtime files are intentionally ignored by Git.
 - Packaging details and target notes live in [WINDOWS-DISTRIBUTION.md](WINDOWS-DISTRIBUTION.md).
+
