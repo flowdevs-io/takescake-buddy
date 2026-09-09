@@ -3572,11 +3572,39 @@ function buildHistoryPageBody() {
     `;
 }
 
+const CORS_HEADERS: Record<string, string> = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "*",
+  "Access-Control-Allow-Private-Network": "true",
+  "Access-Control-Max-Age": "86400",
+};
+
+function jsonResponse(data: unknown, init?: ResponseInit): Response {
+  const headers = new Headers(init?.headers);
+  headers.set("Content-Type", "application/json");
+  for (const [k, v] of Object.entries(CORS_HEADERS)) {
+    headers.set(k, v);
+  }
+  return new Response(JSON.stringify(data), {
+    ...init,
+    headers,
+  });
+}
+
 Bun.serve({
   port: SERVER_PORT,
   idleTimeout: 0,
   async fetch(req) {
     const url = new URL(req.url);
+
+    if (req.method === "OPTIONS") {
+      return new Response(null, {
+        status: 204,
+        headers: CORS_HEADERS,
+      });
+    }
+
     if (url.pathname === "/") {
         return Response.redirect(new URL("/live", req.url), 302);
     }
@@ -3584,38 +3612,38 @@ Bun.serve({
         const filename = decodeURIComponent(url.pathname.slice((CARD_IMAGE_ROUTE + "/").length)).replace(/[^a-zA-Z0-9._-]/g, "");
         const filePath = `${CARD_IMAGE_DIR}/${filename}`;
         if (!filename || !fs.existsSync(filePath)) {
-            return new Response("Not found", { status: 404 });
+            return new Response("Not found", { status: 404, headers: CORS_HEADERS });
         }
-        return new Response(Bun.file(filePath));
+        return new Response(Bun.file(filePath), { headers: CORS_HEADERS });
     }
     if (url.pathname === "/api/state") {
-        return new Response(JSON.stringify(getEnhancedState()), { headers: { "Content-Type": "application/json" } });
+        return jsonResponse(getEnhancedState());
     }
     if (url.pathname === "/api/health") {
-        return new Response(JSON.stringify({
+        return jsonResponse({
             ok: true,
             pid: process.pid,
             port: SERVER_PORT,
             dataDir: DATA_DIR,
             logPath: LOG_PATH
-        }), { headers: { "Content-Type": "application/json" } });
+        });
     }
     if (url.pathname === "/api/economy") {
-        return new Response(JSON.stringify(playerEconomy), { headers: { "Content-Type": "application/json" } });
+        return jsonResponse(playerEconomy);
     }
     if (url.pathname === "/api/progression") {
-        return new Response(JSON.stringify(playerProgression), { headers: { "Content-Type": "application/json" } });
+        return jsonResponse(playerProgression);
     }
     if (url.pathname === "/api/rank") {
-        return new Response(JSON.stringify(playerRank), { headers: { "Content-Type": "application/json" } });
+        return jsonResponse(playerRank);
     }
     if (url.pathname === "/api/crafting-cost" && req.method === "POST") {
         try {
             const body = await req.json();
             const result = calculateDeckCraftingCost(body);
-            return new Response(JSON.stringify(result), { headers: { "Content-Type": "application/json" } });
+            return jsonResponse(result);
         } catch (err) {
-            return new Response(JSON.stringify({ error: String(err) }), { status: 400, headers: { "Content-Type": "application/json" } });
+            return jsonResponse({ error: String(err) }, { status: 400 });
         }
     }
     if (url.pathname === "/api/collection/summary") {
@@ -3624,7 +3652,7 @@ Bun.serve({
         const format = url.searchParams.get("format") || undefined;
         const maxCards = Number(url.searchParams.get("maxCards") || 24);
         const data = collectionStore.buildCollectionSummary({ query, format, maxCards });
-        return new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json" } });
+        return jsonResponse(data);
     }
     if (url.pathname === "/api/collection/llm-context") {
         refreshCollectionMemory();
@@ -3632,22 +3660,22 @@ Bun.serve({
         const format = url.searchParams.get("format") || undefined;
         const maxCards = Number(url.searchParams.get("maxCards") || 96);
         const text = collectionStore.buildCollectionAiContext({ query, format, maxCards });
-        return new Response(JSON.stringify({ text }), { headers: { "Content-Type": "application/json" } });
+        return jsonResponse({ text });
     }
     if (url.pathname === "/api/collection") {
         refreshCollectionMemory();
         const query = url.searchParams.get("q") || undefined;
         const format = url.searchParams.get("format") || undefined;
         const data = collectionStore.loadCollectionCards({ query, format });
-        return new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json" } });
+        return jsonResponse(data);
     }
     if (url.pathname === "/api/sync-llm" && req.method === "POST") {
         try {
             const body = await req.text();
             fs.writeFileSync(LLM_CONTEXT_FILE, body);
-            return new Response(JSON.stringify({ success: true }), { headers: { "Content-Type": "application/json" } });
+            return jsonResponse({ success: true });
         } catch (err) {
-            return new Response(JSON.stringify({ success: false, error: String(err) }), { status: 500, headers: { "Content-Type": "application/json" } });
+            return jsonResponse({ success: false, error: String(err) }, { status: 500 });
         }
     }
     if (url.pathname === "/api/live-stream") {
@@ -3657,7 +3685,7 @@ Bun.serve({
                 controller.enqueue(`event: init\ndata: ${JSON.stringify(getEnhancedState())}\n\n`);
             },
             cancel(controller) { clients.delete(controller); }
-        }), { headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" } });
+        }), { headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", ...CORS_HEADERS } });
     }
     if (url.pathname === "/api/history") {
         const deckName = url.searchParams.get("deck") || undefined;
@@ -3665,17 +3693,17 @@ Bun.serve({
         const limitMatches = Number(url.searchParams.get("limitMatches") || 15);
         const includeTurns = url.searchParams.get("turns") === "1";
         const data = historyStore.getHistory({ deckName, limitGames, limitMatches, includeTurns });
-        return new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json" } });
+        return jsonResponse(data);
     }
     if (url.pathname === "/api/history/summary") {
         const deckName = url.searchParams.get("deck") || undefined;
         const data = historyStore.getHistorySummary({ deckName });
-        return new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json" } });
+        return jsonResponse(data);
     }
     if (url.pathname === "/api/history/runs") {
         const limit = Number(url.searchParams.get("limit") || 20);
         const data = historyStore.loadRecentRuns(limit);
-        return new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json" } });
+        return jsonResponse(data);
     }
     if (url.pathname === "/api/history/llm-context") {
         // Returns a plain-text block containing the narrative summaries of recent games.
@@ -3705,7 +3733,7 @@ Bun.serve({
                 }
             }
         }
-        return new Response(lines.join("\n"), { headers: { "Content-Type": "text/plain" } });
+        return new Response(lines.join("\n"), { headers: { "Content-Type": "text/plain", ...CORS_HEADERS } });
     }
 
     if (url.pathname === "/overlay") {
